@@ -1,6 +1,6 @@
 import { CalendarDays, CalendarPlus, ExternalLink, Globe, Loader2, Map as MapIcon, MapPin, MessageSquarePlus, Navigation, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { CategoryBadge, StatusBadge } from '@/components/badges'
 import { useItinerarySheet } from '@/components/itinerary/itinerarySheet'
 import { Button } from '@/components/ui/Button'
@@ -43,6 +43,8 @@ export function PlaceDetail({ place, tally, scheduled, onEdit, onEditPin, onDele
   const website = safeWebsite(place.website)
   const addedBy = members.find((m) => m.id === place.added_by)
   const hasPin = place.lat != null && place.lng != null
+  // On the map the pin is already right there, so "Show on map" would do nothing.
+  const onMap = useLocation().pathname.startsWith('/map')
 
   return (
     <div className="grid gap-4">
@@ -80,7 +82,7 @@ export function PlaceDetail({ place, tally, scheduled, onEdit, onEditPin, onDele
           <ExternalLink className="size-3.5 text-muted" aria-hidden />
           <span className="sr-only"> in Google Maps (opens in a new tab)</span>
         </a>
-        {hasPin && (
+        {hasPin && !onMap && (
           <Link to={`/map?focus=${place.id}`} className={linkButton}>
             <MapIcon className="size-4" aria-hidden />
             Show on map

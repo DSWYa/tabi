@@ -55,7 +55,6 @@ export function CalendarView({ items, days, numberOf, placeById, nameOf, isAdmin
                       type="button"
                       disabled={!inTrip}
                       aria-pressed={isSelected}
-                      aria-label={`${formatDay(day, { weekday: 'long', month: 'long', day: 'numeric' })}${numberOf(day) ? `, day ${numberOf(day)}` : ''}: ${total === 0 ? 'nothing planned' : `${total} ${total === 1 ? 'stop' : 'stops'}`}`}
                       onClick={() => setPicked(day)}
                       className={clsx(
                         'flex min-h-14 flex-col items-center gap-1 rounded-xl p-1 text-sm transition sm:min-h-20 sm:items-stretch',
@@ -65,7 +64,11 @@ export function CalendarView({ items, days, numberOf, placeById, nameOf, isAdmin
                         day === today && !isSelected && 'ring-2 ring-accent',
                       )}
                     >
-                      <span className="sm:self-start sm:px-1">{Number(day.slice(8))}</span>
+                      {/* The full description is the button's name (no aria-label, so the visible number stays part of it). */}
+                      <span className="sr-only">
+                        {`${formatDay(day, { weekday: 'long', month: 'long', day: 'numeric' })}${numberOf(day) ? `, day ${numberOf(day)}` : ''}: ${total === 0 ? 'nothing planned' : `${total} ${total === 1 ? 'stop' : 'stops'}`}`}
+                      </span>
+                      <span className="sm:self-start sm:px-1" aria-hidden>{Number(day.slice(8))}</span>
                       {counts && (
                         <span className="flex justify-center gap-0.5 sm:hidden" aria-hidden>
                           {DAY_SLOTS.map((s) => counts[s.key] > 0 && <span key={s.key} className={clsx('size-1.5 rounded-full', isSelected ? 'bg-accent-fg' : 'bg-accent')} />)}

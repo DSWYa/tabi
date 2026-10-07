@@ -177,6 +177,26 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"reservation_reminders": {
+                  Row: {
+                    "day": string,"item_id": string,"sent_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "day": string,"item_id": string,"sent_at"?: string
+                  }
+                  Update: {
+                    "day"?: string,"item_id"?: string,"sent_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reservation_reminders_item_id_fkey"
+      columns: ["item_id"]
+isOneToOne: false
+      referencedRelation: "itinerary_items"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"travel_sections": {
                   Row: {
                     "body": string,"created_at": string,"icon": string | null,"id": string,"sort_order": number,"title": string,"updated_at": string,"updated_by": string | null
@@ -269,6 +289,9 @@ isOneToOne: false
 "check_family_code":
 { Args: { "code": string }; Returns: boolean
                            },
+"format_when":
+{ Args: { "p_day": string,"p_slot": string,"p_time"?: string }; Returns: string
+                           },
 "generate_family_code":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
@@ -280,6 +303,9 @@ isOneToOne: false
                            },
 "is_owner_email":
 { Args: { "uid": string }; Returns: boolean
+                           },
+"itinerary_item_name":
+{ Args: { "p_place_id": string,"p_title": string }; Returns: string
                            },
 "itinerary_sort_order_for":
 { Args: { "p_day": string,"p_exclude"?: string,"p_slot": string,"p_start": string }; Returns: number
@@ -302,6 +328,12 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"member_ids":
+{ Args: { "admins_only"?: boolean }; Returns: (string)[]
+                           },
+"member_name":
+{ Args: { "uid": string }; Returns: string
+                           },
 "move_itinerary_item":
 { Args: { "item_id": string,"to_day": string,"to_index": number,"to_slot": string }; Returns: undefined
                            },
@@ -310,6 +342,12 @@ isOneToOne: false
                            },
 "normalize_code":
 { Args: { "c": string }; Returns: string
+                           },
+"notification_defaults":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"notify":
+{ Args: { "p_actor": string,"p_body": string,"p_kind": string,"p_link": string,"p_recipients": (string)[],"p_title": string }; Returns: undefined
                            },
 "place_is_open":
 { Args: { "p_place_id": string }; Returns: boolean
@@ -323,8 +361,22 @@ isOneToOne: false
 "rotate_family_code":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"send_reservation_reminders":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "set_member_role":
 { Args: { "new_role": string,"target": string }; Returns: undefined
+                           },
+"suggestion_name":
+{ Args: { "p_item_id": string,"p_place_id": string,"p_title": string }; Returns: string
+                           },
+"unused_storage_objects":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "bucket_id": string,"name": string
+            }[]
+                           },
+"wants_notification":
+{ Args: { "kind": string,"uid": string }; Returns: boolean
                            },
 "whiteboard_files_valid":
 { Args: { "files": Json }; Returns: boolean

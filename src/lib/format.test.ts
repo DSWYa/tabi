@@ -1,4 +1,4 @@
-import { daysBetween, formatDateRange, formatPrice, initials, parseDateOnly, tripCountdown } from './format'
+import { daysBetween, formatDateRange, formatPrice, initials, parseDateOnly, timeAgo, tripCountdown } from './format'
 
 describe('formatPrice', () => {
   it('shows yen and approximate dollars', () => {
@@ -48,4 +48,17 @@ describe('tripCountdown', () => {
   it('knows when it is over', () => {
     expect(tripCountdown('2026-11-01', '2026-11-09', today)).toEqual({ kind: 'after' })
   })
+})
+
+describe('timeAgo', () => {
+  const now = new Date('2026-11-24T12:00:00')
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString()
+  it.each([
+    [10_000, 'just now'],
+    [5 * 60_000, '5 min ago'],
+    [3 * 3_600_000, '3 h ago'],
+    [30 * 3_600_000, 'yesterday'],
+    [4 * 86_400_000, '4 days ago'],
+    [20 * 86_400_000, 'Nov 4'],
+  ])('%i ms → %s', (ms, text) => expect(timeAgo(ago(ms), now)).toBe(text))
 })

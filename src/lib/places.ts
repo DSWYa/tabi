@@ -1,12 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { useAuth } from './auth'
 import type { CategoryKey, GeocodeStatus, PlaceStatus, VoteValue } from './constants'
 import { friendlyError } from './join'
+import { applyPlaceOps, applyVoteOps, hasPendingCreate, placeIdOf, type OutboxOp, type SubmitResult } from './outbox'
+import { outbox, useOutbox } from './outboxRuntime'
 import { supabase, type Tables } from './supabase'
 import type { VoteRow } from './votes'
 
 // The family's whole place list is small (tens to low hundreds of rows), so one query holds it all and
 // every page filters client-side. Realtime (useCoreRealtime) invalidates these keys on any change.
+// New places, edits and votes go through the outbox (works offline); what's still waiting is shown on top of the
+// server data via `select`, so it survives refetches and reloads until it's sent.
 export const placesKey = ['places'] as const
 export const votesKey = ['votes'] as const
 
@@ -39,6 +44,8 @@ export function geocodeResetFor(before: Pick<Place, 'name' | 'address' | 'geocod
 
 export function usePlaces() {
   const { session } = useAuth()
+  const { ops } = useOutbox()
+  const select = useCallback((rows: Place[]) => applyPlaceOps(rows, ops), [ops])
   return useQuery({
     queryKey: placesKey,
     enabled: Boolean(session),
@@ -47,11 +54,14 @@ export function usePlaces() {
       if (error) throw error
       return data as Place[]
     },
+    select,
   })
 }
 
 export function useVotes() {
   const { session } = useAuth()
+  const { ops } = useOutbox()
+  const select = useCallback((rows: VoteRow[]) => applyVoteOps(rows, ops), [ops])
   return useQuery({
     queryKey: votesKey,
     enabled: Boolean(session),
@@ -60,8 +70,27 @@ export function useVotes() {
       if (error) throw error
       return data as VoteRow[]
     },
+    select,
   })
 }
+
+/** Common fields of a new outbox entry. */
+export function opBase(userId: string, label: string) {
+  return { id: crypto.randomUUID(), userId, queuedAt: new Date().toISOString(), label }
+}
+
+/** A place's name for outbox labels, including places that so far only exist in the outbox. */
+function placeNameFor(queryClient: ReturnType<typeof useQueryClient>, id: string): string {
+  const rows = applyPlaceOps(queryClient.getQueryData<Place[]>(placesKey) ?? [], outbox.getSnapshot().ops)
+  return rows.find((p) => p.id === id)?.name ?? 'a place'
+}
+
+/** A queued write's outcome: `queued` means it's saved on this device and will be sent when back online. */
+export interface Submitted {
+  queued: boolean
+}
+
+const submitted = (result: SubmitResult): Submitted => ({ queued: result === 'queued' })
 
 /** RLS turns a forbidden UPDATE/DELETE into "0 rows"; surface that as a real error. */
 export function ensureAffected(rows: unknown[] | null, what: string) {
@@ -87,43 +116,51 @@ function usePlacesCacheUpdater() {
   }
 }
 
+/** The row as the server will create it (status, owner and timestamps are forced by places_guard anyway). */
+export function newPlaceRow(input: PlaceInput & { lat?: number | null; lng?: number | null }, uid: string, id: string = crypto.randomUUID()): Place {
+  const pinned = input.lat != null && input.lng != null
+  const now = new Date().toISOString()
+  return {
+    ...input,
+    id,
+    lat: pinned ? input.lat! : null,
+    lng: pinned ? input.lng! : null,
+    geocode_status: pinned ? 'manual' : 'pending',
+    geocoded_address: pinned ? input.address : null,
+    status: 'awaiting',
+    added_by: uid,
+    status_changed_by: null,
+    status_changed_at: null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
+/** Add a place. Client-generated id: the sheet can open it right away, offline too; re-sending is harmless. */
 export function useCreatePlace() {
-  const { queryClient, invalidate } = usePlacesCacheUpdater()
+  const { session } = useAuth()
+  const uid = session?.user.id
   return useMutation({
-    mutationFn: async (input: PlaceInput & { lat?: number | null; lng?: number | null }) => {
-      // Client-generated id: the form can open the new place right away, and retries stay idempotent.
-      const id = crypto.randomUUID()
-      const pinned = input.lat != null && input.lng != null
-      const { data, error } = await supabase
-        .from('places')
-        .insert({
-          ...input,
-          id,
-          geocode_status: pinned ? 'manual' : 'pending',
-          geocoded_address: pinned ? input.address : null,
-        })
-        .select('*')
-        .single()
-      if (error) throw error
-      return data as Place
+    mutationFn: async (input: PlaceInput & { lat?: number | null; lng?: number | null }): Promise<Submitted & { place: Place }> => {
+      if (!uid) throw new Error('Not signed in')
+      const place = newPlaceRow(input, uid)
+      const result = await outbox.submit({ ...opBase(uid, `Add “${place.name}”`), kind: 'place.create', row: place })
+      return { place, ...submitted(result) }
     },
-    // Show it immediately (the detail sheet opens on it); the refetch confirms.
-    onSuccess: (place) => queryClient.setQueryData<Place[]>(placesKey, (rows) => (rows ? [place, ...rows] : [place])),
-    onSettled: invalidate,
   })
 }
 
+/** Edit a place (owner or admin; RLS decides). Shown immediately; sent now or when back online. */
 export function useUpdatePlace() {
-  const cache = usePlacesCacheUpdater()
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+  const uid = session?.user.id
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: PlacePatch }) => {
-      const { data, error } = await supabase.from('places').update(patch).eq('id', id).select('id')
-      if (error) throw error
-      ensureAffected(data, 'edit this place')
+    mutationFn: async ({ id, patch }: { id: string; patch: PlacePatch }): Promise<Submitted> => {
+      if (!uid) throw new Error('Not signed in')
+      const name = patch.name ?? placeNameFor(queryClient, id)
+      return submitted(await outbox.submit({ ...opBase(uid, `Edit “${name}”`), kind: 'place.update', placeId: id, patch }))
     },
-    onMutate: ({ id, patch }) => cache.patchLocal(id, patch),
-    onError: (_e, _v, context) => cache.restore(context),
-    onSettled: cache.invalidate,
   })
 }
 
@@ -146,9 +183,13 @@ export function useDeletePlace() {
   const { queryClient, invalidate } = usePlacesCacheUpdater()
   return useMutation({
     mutationFn: async (id: string) => {
+      const about = (o: OutboxOp) => placeIdOf(o) === id
+      // Never sent? Then deleting it just means not sending it.
+      if (hasPendingCreate(outbox.getSnapshot().ops, id)) return outbox.discard(about)
       const { data, error } = await supabase.from('places').delete().eq('id', id).select('id')
       if (error) throw error
       ensureAffected(data, 'delete this place')
+      await outbox.discard(about) // queued edits/votes for it would only fail now
     },
     onSuccess: (_d, id) => {
       queryClient.setQueryData<Place[]>(placesKey, (rows) => rows?.filter((p) => p.id !== id))
@@ -158,39 +199,18 @@ export function useDeletePlace() {
   })
 }
 
-/** Cast, change or (with `vote: null`) withdraw my vote. Optimistic; RLS only allows it while the place is awaiting. */
+/** Cast, change or (with `vote: null`) withdraw my vote. Shown immediately; RLS only allows it while the place is awaiting. */
 export function useCastVote() {
   const { session } = useAuth()
   const uid = session?.user.id
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ placeId, vote }: { placeId: string; vote: VoteValue | null }) => {
+    mutationFn: async ({ placeId, vote }: { placeId: string; vote: VoteValue | null }): Promise<Submitted> => {
       if (!uid) throw new Error('Not signed in')
-      if (vote === null) {
-        const { error } = await supabase.from('votes').delete().eq('place_id', placeId).eq('user_id', uid)
-        if (error) throw error
-        return
-      }
-      const { data, error } = await supabase
-        .from('votes')
-        .upsert({ place_id: placeId, user_id: uid, vote }, { onConflict: 'place_id,user_id' })
-        .select('place_id')
-      if (error) throw error
-      ensureAffected(data, 'vote on this place')
+      const name = placeNameFor(queryClient, placeId)
+      const label = vote ? `Vote “${vote}” on “${name}”` : `Take back vote on “${name}”`
+      return submitted(await outbox.submit({ ...opBase(uid, label), kind: 'vote', placeId, vote }))
     },
-    onMutate: async ({ placeId, vote }) => {
-      await queryClient.cancelQueries({ queryKey: votesKey })
-      const previous = queryClient.getQueryData<VoteRow[]>(votesKey)
-      queryClient.setQueryData<VoteRow[]>(votesKey, (rows = []) => {
-        const others = rows.filter((v) => !(v.place_id === placeId && v.user_id === uid))
-        return vote && uid ? [...others, { place_id: placeId, user_id: uid, vote }] : others
-      })
-      return { previous }
-    },
-    onError: (_e, _v, context) => {
-      if (context?.previous) queryClient.setQueryData(votesKey, context.previous)
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: votesKey }),
   })
 }
 
@@ -198,7 +218,7 @@ export function useCastVote() {
 export function placeErrorMessage(error: { code?: string; message?: string; name?: string } | null | undefined): string {
   if (!error) return ''
   const message = error.message ?? ''
-  if (error.code === 'not_allowed') return message
+  if (error.code === 'not_allowed' || error.name === 'OutboxRefusedError') return message
   if (error.code === '42501' && /status/i.test(message)) return 'Only the admin can change a place’s status.'
   if (error.code === '42501' && /votes/i.test(message)) return 'Voting on this place has closed — the admin already decided.'
   if (error.code === '23514' && /website/i.test(message)) return 'The website must start with http:// or https://.'

@@ -7,11 +7,15 @@ const api = vi.hoisted(() => ({
   rpc: vi.fn(),
   signUp: vi.fn(),
   signInWithPassword: vi.fn(),
+  resetPasswordForEmail: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase', () => ({
   isSupabaseConfigured: true,
-  supabase: { rpc: api.rpc, auth: { signUp: api.signUp, signInWithPassword: api.signInWithPassword } },
+  supabase: {
+    rpc: api.rpc,
+    auth: { signUp: api.signUp, signInWithPassword: api.signInWithPassword, resetPasswordForEmail: api.resetPasswordForEmail },
+  },
 }))
 
 beforeEach(() => {
@@ -38,7 +42,7 @@ async function fillSignUp(user: ReturnType<typeof userEvent.setup>, name: string
 it('rejects a wrong family code without revealing anything', async () => {
   await enterCode('nope', false)
   expect(api.rpc).toHaveBeenCalledWith('check_family_code', { code: 'nope' })
-  expect(await screen.findByText(/doesn.t match/i)).toBeInTheDocument()
+  expect(await screen.findByText(/doesn.t work/i)).toBeInTheDocument()
   expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument()
 })
 
@@ -100,4 +104,19 @@ it('returning members can sign in without the code and see friendly errors', asy
   await user.click(screen.getByRole('button', { name: /^sign in$/i }))
   expect(await screen.findByRole('alert')).toHaveTextContent(/don.t match/i)
   expect(readJoinIntent()).toBeNull()
+})
+
+it('sends a password reset link without saying whether the account exists', async () => {
+  api.resetPasswordForEmail.mockResolvedValueOnce({ data: {}, error: null })
+  const user = userEvent.setup()
+  render(<Gate />)
+  await user.click(screen.getByRole('button', { name: /sign in/i }))
+  await user.click(screen.getByRole('button', { name: /forgot password/i }))
+  await user.type(screen.getByLabelText(/^email/i), ' casey@example.com ')
+  await user.click(screen.getByRole('button', { name: /send reset link/i }))
+
+  expect(api.resetPasswordForEmail).toHaveBeenCalledWith('casey@example.com', { redirectTo: expect.stringMatching(/^http/) })
+  expect(await screen.findByRole('status')).toHaveTextContent(/if casey@example.com has a tabi account/i)
+  await user.click(screen.getByRole('button', { name: /back to sign in/i }))
+  expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument()
 })

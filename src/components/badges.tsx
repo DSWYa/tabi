@@ -1,5 +1,5 @@
 import {
-  CalendarCheck, CalendarClock, CalendarX, CheckCircle2, Footprints, Hourglass, XCircle, type LucideIcon,
+  CalendarCheck, CalendarClock, CalendarX, CheckCircle2, CloudUpload, Footprints, Hourglass, XCircle, type LucideIcon,
 } from 'lucide-react'
 import {
   categoryByKey, placeStatusByKey, reservationByKey,
@@ -44,4 +44,13 @@ export function ReservationBadge({ status }: { status: ReservationStatus }) {
   const { label, tone } = reservationByKey[status]
   const Icon = reservationIcons[status]
   return <Badge tone={tone} icon={<Icon className="size-3.5" aria-hidden />}>{label}</Badge>
+}
+
+/** Saved on this device, not on the server yet (offline, or about to be sent). */
+export function PendingSyncBadge() {
+  return (
+    <Badge tone="warn" icon={<CloudUpload className="size-3.5" aria-hidden />}>
+      Pending sync
+    </Badge>
+  )
 }

@@ -15,6 +15,7 @@ import { NOTIFICATION_KINDS, type NotificationKind } from '@/lib/constants'
 import { checkAvatarFile, processAvatar } from '@/lib/image'
 import { friendlyError, NAME_MAX, PASSWORD_MIN, validateDisplayName, validatePassword } from '@/lib/join'
 import { useMe, useSyncedTheme, useUpdateMyProfile } from '@/lib/members'
+import { useOutbox } from '@/lib/outboxRuntime'
 import { supabase, type Profile } from '@/lib/supabase'
 import type { ThemePreference } from '@/lib/theme'
 
@@ -257,6 +258,12 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
   const { session, signOut } = useAuth()
   const [busy, setBusy] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const unsent = useOutbox().ops.filter((o) => o.userId === session?.user.id).length
+  const doSignOut = async () => {
+    setBusy(true)
+    await signOut()
+  }
   return (
     <Card className="animate-rise">
       <CardHeader title="Account" icon={<UserRound className="size-4" />} />
@@ -277,18 +284,24 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
           <KeyRound className="size-4" aria-hidden />
           Change password
         </Button>
-        <Button
-          variant="secondary"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true)
-            await signOut()
-          }}
-        >
+        <Button variant="secondary" disabled={busy} onClick={() => (unsent ? setConfirmSignOut(true) : void doSignOut())}>
           <LogOut className="size-4" aria-hidden />
           Sign out
         </Button>
       </div>
+      <Sheet open={confirmSignOut} onClose={() => setConfirmSignOut(false)} title="Sign out with unsent changes?">
+        <p className="text-sm text-muted">
+          {unsent === 1 ? '1 change you made offline hasn’t' : `${unsent} changes you made offline haven’t`} been sent yet.
+          Signing out deletes {unsent === 1 ? 'it' : 'them'} from this device. Wait until you’re back online to keep {unsent === 1 ? 'it' : 'them'}.
+        </p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => setConfirmSignOut(false)}>Stay signed in</Button>
+          <Button variant="destructive" disabled={busy} onClick={() => void doSignOut()}>
+            <LogOut className="size-4" aria-hidden />
+            Sign out anyway
+          </Button>
+        </div>
+      </Sheet>
       {changingPassword && <ChangePasswordSheet email={session?.user.email ?? ''} onClose={() => setChangingPassword(false)} />}
     </Card>
   )

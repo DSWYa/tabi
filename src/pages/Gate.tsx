@@ -9,7 +9,7 @@ import {
 } from '@/lib/join'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 
-type Step = 'code' | 'signup' | 'signin' | 'check-email'
+type Step = 'code' | 'signup' | 'signin' | 'check-email' | 'forgot'
 
 /**
  * The only screen a visitor without a session sees. It reveals nothing about the trip.
@@ -63,8 +63,10 @@ export default function Gate() {
             setNotice('')
             setStep(codeOk ? 'signup' : 'code')
           }}
+          onForgot={() => setStep('forgot')}
         />
       )}
+      {step === 'forgot' && <ForgotStep email={email} setEmail={setEmail} onBack={() => goSignIn()} />}
       {step === 'check-email' && (
         <div className={gateCardClass}>
           <span className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-ok-bg text-ok-fg">
@@ -131,7 +133,7 @@ function CodeStep({ code, setCode, onValid, onSignIn }: {
         className="h-13 w-full rounded-2xl border-2 border-border bg-bg px-4 text-center font-mono text-lg font-bold tracking-[0.2em] uppercase placeholder:text-muted/50 focus:border-accent focus:outline-none"
       />
       <p id="family-code-help" aria-live="polite" className="mt-2 min-h-5 text-center text-sm">
-        {state === 'invalid' && <span className="font-bold text-bad-fg">That code doesn't match. Check with the trip organizer.</span>}
+        {state === 'invalid' && <span className="font-bold text-bad-fg">That code doesn't work. Check with the trip organizer — joining may be closed.</span>}
         {state === 'error' && <span className="font-bold text-bad-fg">Couldn't reach the server. Check your connection and try again.</span>}
         {(state === 'idle' || state === 'checking') && <span className="text-muted">Ask the trip organizer for the code.</span>}
       </p>
@@ -251,12 +253,13 @@ function SignUpStep({ code, email, setEmail, onConfirmEmail, onExistingAccount, 
   )
 }
 
-function SignInStep({ code, email, setEmail, notice, onCreate }: {
+function SignInStep({ code, email, setEmail, notice, onCreate, onForgot }: {
   code: string
   email: string
   setEmail: (email: string) => void
   notice: string
   onCreate: () => void
+  onForgot: () => void
 }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -295,6 +298,9 @@ function SignInStep({ code, email, setEmail, notice, onCreate }: {
           autoComplete="current-password"
           required
         />
+        <p className="-mt-2 text-right text-sm">
+          <TextButton onClick={onForgot}>Forgot password?</TextButton>
+        </p>
         <FormMessage tone="error">{error}</FormMessage>
         <Button type="submit" className="w-full justify-center" disabled={busy || !email.trim() || !password}>
           {busy && <Loader2 className="size-5 animate-spin" aria-hidden />}
@@ -303,6 +309,74 @@ function SignInStep({ code, email, setEmail, notice, onCreate }: {
       </div>
       <p className="mt-3 text-center text-sm text-muted">
         New here? <TextButton onClick={onCreate}>{code ? 'Create an account' : 'Enter the family code'}</TextButton>
+      </p>
+    </form>
+  )
+}
+
+/** Sends a reset link. The answer never says whether an account exists for that address. */
+function ForgotStep({ email, setEmail, onBack }: { email: string; setEmail: (email: string) => void; onBack: () => void }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const [error, setError] = useState('')
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setError('')
+    setState('sending')
+    // PKCE: the link comes back as `?code=…` to this page, in this browser, and opens the "new password" screen.
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}${window.location.pathname}`,
+    })
+    if (error) {
+      setState('idle')
+      return setError(friendlyError(error))
+    }
+    setState('sent')
+  }
+
+  if (state === 'sent') {
+    return (
+      <div className={gateCardClass}>
+        <span className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-ok-bg text-ok-fg">
+          <MailCheck className="size-7" aria-hidden />
+        </span>
+        <h2 className="text-center text-lg font-extrabold">Check your email</h2>
+        <p role="status" className="mt-2 text-center text-sm text-muted">
+          If <span className="font-bold text-text">{email.trim()}</span> has a Tabi account, a link to set a new password is on its
+          way. Open it <span className="font-bold text-text">on this device, in this browser</span>.
+        </p>
+        <p className="mt-4 text-center text-sm">
+          <TextButton onClick={onBack}>Back to sign in</TextButton>
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className={gateCardClass} noValidate>
+      <h2 className="mb-1 text-lg font-extrabold">Reset your password</h2>
+      <p className="mb-4 text-sm text-muted">We'll email you a link to choose a new one.</p>
+      <div className="grid gap-3.5">
+        <Field
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          inputMode="email"
+          required
+        />
+        <FormMessage tone="error">{error}</FormMessage>
+        <Button type="submit" className="w-full justify-center" disabled={state === 'sending' || !email.trim()}>
+          {state === 'sending' && <Loader2 className="size-5 animate-spin" aria-hidden />}
+          Send reset link
+        </Button>
+      </div>
+      <p className="mt-3 text-center text-sm text-muted">
+        <TextButton onClick={onBack}>
+          <ArrowLeft className="mr-1 size-4" aria-hidden />
+          Back to sign in
+        </TextButton>
       </p>
     </form>
   )

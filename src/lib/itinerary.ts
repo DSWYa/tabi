@@ -311,10 +311,10 @@ export function useMoveItem() {
 }
 
 /** Friendly text for itinerary and suggestion errors. */
-export function itineraryErrorMessage(error: { code?: string; message?: string } | null | undefined): string {
+export function itineraryErrorMessage(error: { code?: string; message?: string; name?: string } | null | undefined): string {
   if (!error) return ''
   const message = error.message ?? ''
-  if (error.code === 'not_allowed') return message
+  if (error.code === 'not_allowed' || error.name === 'OutboxRefusedError') return message
   if (error.code === '42501' && /suggestion/i.test(message)) return 'Only the admin can review suggestions.'
   if (error.code === '42501') return 'Only the admin can change the itinerary. You can suggest a change instead.'
   if (error.code === 'P0002') return 'That was just removed by someone else.'

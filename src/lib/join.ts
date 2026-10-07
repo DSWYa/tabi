@@ -121,7 +121,7 @@ export function friendlyError(error: ErrorLike | null | undefined): string {
       return 'Someone else just took that. Pick another one.'
     case '42501':
       return /family code/i.test(message)
-        ? "That family code doesn't match. Check with the trip organizer."
+        ? "That family code doesn't match. Check with the trip organizer — they may have closed joining."
         : "You don't have permission to do that."
   }
   return message || 'Something went wrong. Please try again.'

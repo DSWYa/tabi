@@ -4,7 +4,8 @@ import type { AppState, BinaryFileData, BinaryFiles, Collaborator, ExcalidrawImp
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import {
-  blobToDataUrl, dataUrlToBlob, fetchWhiteboard, saveWhiteboard, uploadWhiteboardImage, whiteboardImageUrl, type WhiteboardRow,
+  blobToDataUrl, cacheWhiteboardScene, dataUrlToBlob, fetchWhiteboard, saveWhiteboard, uploadWhiteboardImage, whiteboardImageUrl,
+  type WhiteboardRow,
 } from '@/lib/whiteboard'
 import {
   batchesFor, changedSince, checkWhiteboardImage, filesFor, markShared, pruneTombstones, reconcileElements, sceneHash,
@@ -244,6 +245,7 @@ export class WhiteboardSession {
         return // offline: the next reconnect pulls again
       }
       if (row.version <= this.version) return
+      cacheWhiteboardScene(row)
       const cleanBefore = sceneHash(this.scene()) === this.savedHash
       this.version = row.version
       this.receiveFiles(row.files)
@@ -323,10 +325,12 @@ export class WhiteboardSession {
           const scene = this.scene()
           const hash = sceneHash(scene)
           const elements = pruneTombstones(scene as unknown as SceneElement[], Date.now())
-          const next = await saveWhiteboard(elements, filesFor(elements, this.files), this.version)
+          const files = filesFor(elements, this.files)
+          const next = await saveWhiteboard(elements, files, this.version)
           if (next !== null) {
             this.version = Math.max(this.version, next)
             this.savedHash = hash
+            cacheWhiteboardScene({ elements, files, version: next, updated_at: new Date().toISOString(), updated_by: this.me.id })
             break
           }
           if (attempt >= 4) throw new Error('conflict')

@@ -10,14 +10,15 @@ Anon role has **no** table access; only `check_family_code()` is executable by a
 | Table | Key fields | Read | Write |
 |---|---|---|---|
 | `trip` (singleton) | name, destination, start_date, end_date, timezone | members | admin update |
-| `family_invite` (singleton) | code, enabled | admin | admin update / `rotate_family_code()` |
+| `family_invite` (singleton) | code, enabled (off = "closed": `check_family_code` is false for everyone, nobody can join) | admin | admin update (code, enabled) / `rotate_family_code()` |
 | `profiles` | id → auth.users, display_name (not blank), avatar_path (must be `<own id>/…`), role, pin_color (UNIQUE), theme, notification_prefs jsonb (`{kind: boolean}` only) | members (+ own row) | own row, columns display_name/avatar_path/pin_color/theme/notification_prefs only. Insert only via `join_family`. Role via `set_member_role` |
 | `places` | name (not blank), category, priority 1–5, price_jpy ≥ 0, address, website (http(s) only), notes, status, lat/lng, geocode_status (pin exists ⇔ `found`/`manual`), geocoded_address, added_by, status_changed_by/at | members | insert: members (forced `awaiting`, `added_by = me`); update/delete: owner or admin (incl. moving the pin); status change: admin only (trigger, records who/when) |
 | `votes` | PK (place_id, user_id), vote yes/maybe/no | members | own vote only, only while place is `awaiting` |
 | `itinerary_items` | place_id?, title? (not blank), day, slot (morning/afternoon/evening), start_time, end_time, sort_order (admin's order inside the slot), notes, reservation_status (required/booked/none), reservation_ref (not blank), reservation_time — ref/time only when a reservation is required/booked; created_by (forced, immutable) | members | admin (order via `move_itinerary_item`) |
 | `itinerary_suggestions` | either a new stop (place_id? / title?) **or** a move of an existing entry (item_id, no place/title), day, slot, start_time, note, status (pending/approved/rejected), suggested_by, reviewed_by/at, review_note | members | insert: members (forced pending); owner edits/deletes while pending; review: admin only (trigger), normally via `review_itinerary_suggestion` |
 | `travel_sections` | title (not blank), icon (one of `TRAVEL_ICONS`), body (plain text, links/phones made tappable in the UI), sort_order, updated_by (forced) | members | admin (order via `move_travel_section`) |
-| `notifications` | user_id (recipient), kind, title, body, link, actor_id, read_at | own | own `read_at` / delete; inserts by DB triggers only |
+| `notifications` | user_id (recipient), kind, title, body, link (in-app path, e.g. `/voting?place=<id>`), actor_id, read_at | own | own `read_at` / delete; inserts by DB triggers only (see Notifications) |
+| `reservation_reminders` | PK (item_id, day), sent_at — which reservation reminders were already sent | nobody | `send_reservation_reminders()` only |
 | `whiteboard` (singleton) | elements jsonb (array, ≤ 8 MB), files jsonb `{fileId:{path: "<uuid>.<png/jpg/webp/gif>", mimeType}}` (checked by `whiteboard_files_valid`), version (auto++ on every save), updated_by (forced) | members | members, columns elements/files only |
 | `admin_emails` | email (lowercase) PK | nobody (no grants) | SQL editor / service role only, via `add_admin_email()` |
 | `geocode_cache` | query PK (normalized: trimmed, single-spaced, no capitals), found (⇔ lat/lng set), lat, lng, display_name | members | members insert; nobody updates/deletes (SQL editor only) |
@@ -59,6 +60,28 @@ new lookup in the pin editor.
 | `move_itinerary_item(item_id, to_day, to_slot, to_index)` | admin | moves an entry; renumbers the target slot; advisory-locked |
 | `review_itinerary_suggestion(suggestion_id, approve, review_note?)` | admin | one transaction: approve applies it (new entry placed by time, or moves the entry) and adds a still-awaiting/rejected place to the plan; reject just records it. Returns the entry id (null on reject). Errors: `P0002` gone, `55000` already reviewed |
 | `move_travel_section(section_id, to_index)` | admin | reorders Travel Info; renumbers all sections |
+| `send_reservation_reminders()` | members | announces reservations (required/booked) on today or tomorrow (trip time zone), once per entry per day; returns how many were sent. Apps call it hourly |
+| `unused_storage_objects()` | members | `(bucket_id, name)` the caller may delete: avatars no profile uses (admins: any, older than 1 h; members: own folder) and whiteboard images the saved board doesn't reference (older than a day; admins: any; members: own uploads). The app deletes them via the Storage API |
+
+Internal (not callable by the app): `notify()`, `wants_notification()`, `notification_defaults()`, `member_name()`,
+`member_ids()`, `format_when()`, `itinerary_item_name()`, `suggestion_name()` and the `*_notify()` trigger functions.
+
+## Notifications
+Written by `after` triggers (security definer) through `notify(recipients, kind, title, body, link, actor)`, one row
+per recipient who has the kind switched on (`profiles.notification_prefs`, falling back to `notification_defaults()`,
+which mirrors `NOTIFICATION_KINDS` in `src/lib/constants.ts` — a unit test checks). Never to the actor; nothing for
+writes without `auth.uid()` (seed, SQL editor); removed members get nothing. If the same actor already left the
+recipient an unread notification of the same kind and link within 10 minutes, that row is refreshed instead.
+
+| Kind | Trigger | Recipients |
+|---|---|---|
+| `place_added` | insert on `places` | all members |
+| `vote_cast` (off by default) | insert / vote change on `votes` | the place's creator + admins |
+| `status_changed` | `places.status` change | all members |
+| `itinerary_changed` | insert / delete / update of anything but `sort_order` on `itinerary_items` (not the bookkeeping when a place is deleted) | all members |
+| `suggestion_submitted` | insert on `itinerary_suggestions` | admins |
+| `suggestion_reviewed` | suggestion leaves `pending` | the author |
+| `reservation_upcoming` | `send_reservation_reminders()` | all members (no actor) |
 
 ## Storage
 | Bucket | Public | Limit | Path | Write |
@@ -66,15 +89,16 @@ new lookup in the pin editor.
 | `avatars` | yes (unguessable paths) | 2 MB, jpeg/png/webp | `<uid>/<uuid>.webp` (256×256, made in the browser from a ≤10 MB source) | own folder only; the app deletes the previous file on change |
 | `whiteboard` | yes (unguessable paths) | 5 MB, jpeg/png/webp/gif (no SVG) | `<uuid>.<png/jpg/webp/gif>`, no folders (insert policy) | members upload; uploader or admin delete |
 
+Admins may also delete avatars no profile points at once they're an hour old ("admin deletes unused avatars").
 Direct SQL deletes on `storage.objects` are blocked by Supabase's `protect_delete` trigger; the Storage API (and the
 pgTAP tests, via `storage.allow_delete_query`) bypass it, and RLS still decides who may delete.
 
 ## Realtime
 Publication `supabase_realtime` includes: trip, profiles, places, votes, itinerary_items,
-itinerary_suggestions, travel_sections, notifications, whiteboard. Realtime respects RLS.
-The app subscribes to `profiles`, `trip`, `places`, `votes`, `itinerary_items`, `itinerary_suggestions` and
-`travel_sections` (`useCoreRealtime`) and simply refetches the affected query on any event; after a dropped
-connection it refetches everything once.
+itinerary_suggestions, travel_sections, notifications, whiteboard, family_invite. Realtime respects RLS.
+The app subscribes to all of them except the whiteboard (`useCoreRealtime`; notifications filtered to
+`user_id = me`, the invite only reaches admins) and simply refetches the affected query on any event (a new
+notification also shows a toast); after a dropped connection it refetches everything once.
 
 The whiteboard uses its own **private** broadcast channel, topic `whiteboard`. RLS policies on `realtime.messages`
 let only members join it or send on it (a public subscriber to the same topic receives nothing; a signed-in

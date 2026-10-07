@@ -5,7 +5,10 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { Avatar } from '@/components/Avatar'
 import { Wordmark } from '@/components/Brand'
 import { ItinerarySheetHost } from '@/components/itinerary/ItinerarySheetHost'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
+import { NotificationToaster } from '@/components/notifications/NotificationToaster'
 import { PlaceSheetHost } from '@/components/places/PlaceSheetHost'
+import { SyncIndicator } from '@/components/sync/SyncIndicator'
 import { SkeletonCard } from '@/components/ui/States'
 import { Sheet } from '@/components/ui/Sheet'
 import { useMe, useSyncedTheme } from '@/lib/members'
@@ -46,8 +49,9 @@ function Sidebar() {
   const { isAdmin } = useMe()
   return (
     <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-surface/60 px-4 py-5 lg:flex">
-      <div className="mb-6 px-2">
+      <div className="mb-6 flex items-center justify-between gap-2 pl-2">
         <Wordmark />
+        <NotificationBell />
       </div>
       <nav aria-label="Main" className="flex flex-1 flex-col gap-1">
         {navFor(isAdmin).map(({ to, label, icon: Icon }) => (
@@ -67,6 +71,7 @@ function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      <SyncIndicator className="mb-3 self-start" />
       <div className="flex items-center gap-1 border-t border-border pt-3">
         <MeLink />
         <ThemeToggle />
@@ -155,7 +160,9 @@ export function AppShell() {
           <div className="py-2.5">
             <Wordmark />
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center gap-0.5">
+            <SyncIndicator compact />
+            <NotificationBell />
             <ThemeToggle />
             <MeLink compact />
           </div>
@@ -180,6 +187,7 @@ export function AppShell() {
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       <PlaceSheetHost />
       <ItinerarySheetHost />
+      <NotificationToaster />
     </div>
   )
 }

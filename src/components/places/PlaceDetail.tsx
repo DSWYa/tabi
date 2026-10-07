@@ -1,13 +1,14 @@
 import { CalendarDays, CalendarPlus, ExternalLink, Globe, Loader2, Map as MapIcon, MapPin, MessageSquarePlus, Navigation, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { CategoryBadge, StatusBadge } from '@/components/badges'
+import { CategoryBadge, PendingSyncBadge, StatusBadge } from '@/components/badges'
 import { useItinerarySheet } from '@/components/itinerary/itinerarySheet'
 import { Button } from '@/components/ui/Button'
 import { FormMessage } from '@/components/ui/Field'
 import { formatItemWhen, type ItineraryItem } from '@/lib/itinerary'
 import { directionsUrl, safeWebsite } from '@/lib/maps'
 import { useMe } from '@/lib/members'
+import { usePendingSync } from '@/lib/outboxRuntime'
 import { canEditPlace, placeErrorMessage, useDeletePlace, type Place } from '@/lib/places'
 import { CONSENSUS_LABELS, consensus, type VoteTally } from '@/lib/votes'
 import { AddedBy, MemberVotes, PinStatusBadge, PriceText, PriorityStars, VoteCounts } from './bits'
@@ -45,11 +46,13 @@ export function PlaceDetail({ place, tally, scheduled, onEdit, onEditPin, onDele
   const hasPin = place.lat != null && place.lng != null
   // On the map the pin is already right there, so "Show on map" would do nothing.
   const onMap = useLocation().pathname.startsWith('/map')
+  const pendingSync = usePendingSync().places.has(place.id)
 
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={place.status} />
+        {pendingSync && <PendingSyncBadge />}
         <CategoryBadge category={place.category} />
         <PriorityStars priority={place.priority} />
         <PriceText jpy={place.price_jpy} />

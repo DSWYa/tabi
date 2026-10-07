@@ -173,6 +173,18 @@ async function seed() {
     'travel info',
   )
 
+  // A few notifications so the bell has something to show (triggers stay quiet for seed writes).
+  const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString()
+  await check(
+    db.from('notifications').insert([
+      { user_id: userId.Morgan, kind: 'suggestion_submitted', title: 'Casey suggested Shibuya Sky', body: 'Tue, Nov 24 · Evening, 17:00 — “Sunset is around 16:30 — book the slot before!”', link: '/itinerary', actor_id: userId.Casey, created_at: ago(30) },
+      { user_id: userId.Morgan, kind: 'place_added', title: 'Riley added Café Kitsuné Aoyama', body: 'Have a look and cast your vote.', link: `/voting?place=${placeId['Café Kitsuné Aoyama']}`, actor_id: userId.Riley, created_at: ago(90) },
+      { user_id: userId.Casey, kind: 'status_changed', title: 'Senso-ji is in the plan', body: 'Decided by Morgan.', link: `/places?place=${placeId['Senso-ji']}`, actor_id: userId.Morgan, created_at: ago(120) },
+      { user_id: userId.Casey, kind: 'place_added', title: 'Riley added Café Kitsuné Aoyama', body: 'Have a look and cast your vote.', link: `/voting?place=${placeId['Café Kitsuné Aoyama']}`, actor_id: userId.Riley, created_at: ago(90), read_at: ago(60) },
+    ]),
+    'notifications',
+  )
+
   console.log(`Seeded ${MEMBERS.length} members, ${PLACES.length} places, ${ITINERARY.length} itinerary items.`)
   console.log(`Family code: ${DEV_CODE}`)
   console.log(`Sign in as ${MEMBERS.map((m) => m.email).join(', ')} with password "${PASSWORD}".`)

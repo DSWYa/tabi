@@ -91,7 +91,7 @@ export default function Itinerary() {
             <SkeletonCard lines={3} />
             <SkeletonCard lines={3} />
           </div>
-        ) : itinerary.isError ? (
+        ) : itinerary.isError && !itinerary.data ? (
           <Card>
             <ErrorState message="Couldn't load the itinerary." onRetry={() => void itinerary.refetch()} />
           </Card>

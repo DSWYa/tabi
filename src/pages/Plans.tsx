@@ -131,7 +131,7 @@ export default function Plans() {
               <CalendarDays className="size-5 text-accent-text" aria-hidden />
               Scheduled <span className="text-sm font-bold text-muted">{groups.scheduled.length}</span>
             </h2>
-            {itinerary.isError ? (
+            {itinerary.isError && !itinerary.data ? (
               <ErrorState message="Couldn't load the itinerary." onRetry={() => void itinerary.refetch()} />
             ) : groups.scheduled.length === 0 ? (
               <p className="text-sm text-muted">

@@ -2,6 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { geocodePlace, GeocodeUnavailableError, searchNominatim, type GeocodeCache, type GeocodeResult } from './geocode'
 import { useMe } from './members'
+import { hasPendingCreate } from './outbox'
+import { outbox } from './outboxRuntime'
 import { canEditPlace, placesKey, usePlaces, type Place } from './places'
 import { supabase } from './supabase'
 import { useTrip } from './trip'
@@ -55,7 +57,9 @@ export function useGeocodePendingPlaces() {
     if (!me || !places || running.current || !navigator.onLine) return
     // Keyed by updated_at so an edited place (new address → pending again) gets a fresh attempt.
     const attemptKey = (p: Place) => `${p.id}@${p.updated_at}`
-    const queue = places.filter((p) => p.geocode_status === 'pending' && canEditPlace(p, me) && !attempted.current.has(attemptKey(p)))
+    // A place still in the outbox isn't on the server yet; it's looked up once it has been sent.
+    const unsent = (p: Place) => hasPendingCreate(outbox.getSnapshot().ops, p.id)
+    const queue = places.filter((p) => p.geocode_status === 'pending' && canEditPlace(p, me) && !unsent(p) && !attempted.current.has(attemptKey(p)))
     if (queue.length === 0) return
 
     running.current = true

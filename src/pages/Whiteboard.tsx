@@ -3,7 +3,7 @@ import { convertToExcalidrawElements, Excalidraw, MainMenu, viewportCoordsToScen
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { AlertTriangle, Check, CloudOff, Lightbulb, Loader2, Radio, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Check, CloudOff, Eye, Lightbulb, Loader2, Radio, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { Avatar } from '@/components/Avatar'
@@ -16,7 +16,9 @@ import { NOTE_COLORS, type NoteColor } from '@/components/whiteboard/notes'
 import { WhiteboardSession, type Presence, type SyncStatus } from '@/components/whiteboard/session'
 import { pinColorByKey } from '@/lib/constants'
 import { useMe, useSyncedTheme } from '@/lib/members'
-import { fetchWhiteboard } from '@/lib/whiteboard'
+import { timeAgo } from '@/lib/format'
+import { useOnline } from '@/lib/outboxRuntime'
+import { blobToDataUrl, loadWhiteboard, whiteboardImageUrl } from '@/lib/whiteboard'
 
 // Lazy-loaded route: Excalidraw (~1 MB) is only downloaded when someone opens the board.
 // Fonts are self-hosted (copied into the build by vite.config.ts) instead of coming from a CDN.
@@ -38,8 +40,14 @@ export default function Whiteboard() {
   const { resolved } = useSyncedTheme()
   const [params, setParams] = useSearchParams()
   // Loaded once per visit; after that the session keeps the scene in sync (broadcast + saved row).
-  const row = useQuery({ queryKey: ['whiteboard'], queryFn: fetchWhiteboard, staleTime: Infinity, gcTime: 0, refetchOnReconnect: false })
-  const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
+  // Offline, this is the copy saved on this device (`offline: true`), shown read-only until the connection is back.
+  const row = useQuery({ queryKey: ['whiteboard'], queryFn: loadWhiteboard, staleTime: Infinity, gcTime: 0, refetchOnReconnect: false })
+  const readOnly = Boolean(row.data?.offline)
+  const online = useOnline()
+  // The editor instance, tagged with the mode it was created for: switching between the offline copy and the live
+  // board remounts Excalidraw, and nothing may keep talking to the old instance meanwhile.
+  const [editor, setEditor] = useState<{ api: ExcalidrawImperativeAPI; readOnly: boolean } | null>(null)
+  const api = editor && editor.readOnly === readOnly ? editor.api : null
   const [status, setStatus] = useState<SyncStatus>('connecting')
   const [notice, setNotice] = useState('')
   const [peers, setPeers] = useState<Presence[]>([])
@@ -49,8 +57,37 @@ export default function Whiteboard() {
   const meColor = (me?.pin_color && pinColorByKey[me.pin_color as keyof typeof pinColorByKey]?.hex) || '#c44e0a'
   const ideaOpen = params.get('idea') === '1'
 
+  // Back online after showing the offline copy: load the live board (Excalidraw remounts, see its key).
+  const { refetch } = row
   useEffect(() => {
-    if (!api || !row.data || !meId) return
+    if (readOnly && online) void refetch()
+  }, [readOnly, online, refetch])
+
+  // Offline copy: show the images this device has seen before (the service worker keeps them).
+  useEffect(() => {
+    if (!api || !readOnly || !row.data) return
+    let cancelled = false
+    void Promise.all(
+      Object.entries(row.data.files).map(async ([id, f]) => {
+        try {
+          const response = await fetch(whiteboardImageUrl(f.path))
+          if (!response.ok) return null
+          return { id, mimeType: f.mimeType, dataURL: await blobToDataUrl(await response.blob()), created: Date.now() }
+        } catch {
+          return null
+        }
+      }),
+    ).then((files) => {
+      const ok = files.filter((f) => f !== null)
+      if (!cancelled && ok.length) api.addFiles(ok as never)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [api, readOnly, row.data])
+
+  useEffect(() => {
+    if (!api || !row.data || !meId || readOnly) return
     const s = new WhiteboardSession({
       api,
       row: row.data,
@@ -67,7 +104,16 @@ export default function Whiteboard() {
     }
     // The session reads name/color once; a rename mid-session only affects the cursor label.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, row.data, meId])
+  }, [api, row.data, meId, readOnly])
+
+  // Excalidraw's hamburger menu button has no accessible name; give it one once the editor has rendered.
+  useEffect(() => {
+    if (!api) return
+    const t = setTimeout(() => {
+      document.querySelector('.excalidraw .main-menu-trigger:not([aria-label])')?.setAttribute('aria-label', 'Board menu')
+    }, 0)
+    return () => clearTimeout(t)
+  }, [api])
 
   useEffect(() => {
     if (!notice) return
@@ -118,10 +164,17 @@ export default function Whiteboard() {
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-bg px-3 py-1.5 sm:px-4">
         <h1 className="text-lg font-black tracking-tight">Whiteboard</h1>
-        <span role="status" className={clsx('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold', s.tone)}>
-          <s.icon className={clsx('size-3.5', s.spin && 'animate-spin')} aria-hidden />
-          {s.text}
-        </span>
+        {readOnly && row.data ? (
+          <span role="status" className="inline-flex items-center gap-1 rounded-full bg-warn-bg px-2.5 py-0.5 text-xs font-bold text-warn-fg">
+            <Eye className="size-3.5" aria-hidden />
+            Offline — view only, as of {timeAgo(row.data.updated_at)}
+          </span>
+        ) : (
+          <span role="status" className={clsx('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold', s.tone)}>
+            <s.icon className={clsx('size-3.5', s.spin && 'animate-spin')} aria-hidden />
+            {s.text}
+          </span>
+        )}
         {others.length > 0 && (
           <span className="flex items-center gap-1" aria-label={`Also here: ${others.map((m) => m.display_name).join(', ')}`}>
             <span className="flex -space-x-1.5" aria-hidden>
@@ -130,7 +183,7 @@ export default function Whiteboard() {
             <span className="hidden text-xs text-muted sm:inline">here now</span>
           </span>
         )}
-        <Button size="sm" className="ml-auto min-h-11" disabled={!api || !row.data} onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.set('idea', '1'); return n })}>
+        <Button size="sm" className="ml-auto min-h-11" disabled={!api || !row.data || readOnly} onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.set('idea', '1'); return n })}>
           <Lightbulb className="size-4" aria-hidden />
           Add idea
         </Button>
@@ -138,7 +191,7 @@ export default function Whiteboard() {
       {notice && <FormMessage tone="error" className="m-2">{notice}</FormMessage>}
 
       <div className="relative min-h-0 flex-1">
-        {row.isError ? (
+        {row.isError && !row.data ? (
           <ErrorState message="Couldn't load the whiteboard." onRetry={() => void row.refetch()} />
         ) : !row.data ? (
           <div role="status" aria-label="Loading the whiteboard" className="grid h-full place-items-center">
@@ -146,7 +199,9 @@ export default function Whiteboard() {
           </div>
         ) : (
           <Excalidraw
-            excalidrawAPI={setApi}
+            key={readOnly ? 'offline-copy' : 'live'}
+            excalidrawAPI={(instance) => setEditor({ api: instance, readOnly })}
+            viewModeEnabled={readOnly}
             initialData={{ elements: row.data.elements as never, scrollToContent: true }}
             onChange={(elements, appState, files) => session.current?.handleChange(elements, appState, files)}
             onPointerUpdate={(p) => session.current?.handlePointer(p)}
@@ -179,7 +234,7 @@ export default function Whiteboard() {
         )}
       </div>
 
-      <Sheet open={ideaOpen && Boolean(api && row.data)} onClose={closeIdea} title="Add a whiteboard idea">
+      <Sheet open={ideaOpen && Boolean(api && row.data) && !readOnly} onClose={closeIdea} title="Add a whiteboard idea">
         <IdeaForm onSubmit={addIdea} onCancel={closeIdea} />
       </Sheet>
     </div>

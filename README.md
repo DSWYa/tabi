@@ -21,7 +21,12 @@ npm run db:types      # regenerate src/lib/database.types.ts after schema change
 npm run dev           # http://localhost:5173
 ```
 
-Local Studio (DB browser): http://127.0.0.1:54323. Test emails are caught at http://127.0.0.1:54324.
+Local Studio (DB browser): http://127.0.0.1:54323. Test emails (confirmations, password resets) are caught at
+http://127.0.0.1:54324.
+
+The service worker (install, offline) only runs in a production build: `npm run build && npm run preview`, then
+open http://localhost:4173. In DevTools → Application you can see the cache, IndexedDB (`tabi.queryCache`,
+`tabi.outbox`) and toggle *Offline*.
 
 ## Checks
 
@@ -31,36 +36,55 @@ npm run lint && npm run typecheck && npm test && npm run db:test && npm run buil
 
 ## Production setup (one time)
 
-1. **Supabase:** create a free project at supabase.com. In *Authentication → Sign In / Providers*, keep Email
-   enabled. In *Authentication → URL Configuration*, set Site URL to your Pages URL
-   (`https://<user>.github.io/<repo>/`) and add the same URL under *Redirect URLs* (email-confirmation links
-   return there). In *Authentication → Sign In / Providers → Email*, set *Minimum password length* to 8.
-   **Keep "Confirm email" on**: owner-admin (step 3) only trusts confirmed email addresses.
-   Leave *Realtime → Settings → Allow public access* **on** (the default): live updates for places etc. use a
-   public channel that only ever delivers rows RLS lets you read, and the whiteboard uses a private,
-   members-only channel set up by the migrations.
-2. **Apply the schema:**
+Your site will live at `https://<github-user>.github.io/<repo>/` (for this repo: `https://dswya.github.io/tabi/`).
+
+1. **Create the Supabase project.** supabase.com → *New project* → pick a name (e.g. `tabi`), a strong **database
+   password** (save it in your password manager — step 3 asks for it) and a region near you → *Create new project*.
+2. **Auth settings** (left sidebar → *Authentication*):
+   - *Sign In / Providers → Email*: Email enabled, **Confirm email on** (owner-admin only trusts confirmed
+     addresses), minimum password length **8** → *Save*.
+   - *URL Configuration*: **Site URL** = your Pages URL; under **Redirect URLs** add the same URL → *Save*.
+     Confirmation and password-reset emails return there.
+   - Leave *Realtime → Settings → Allow public access* **on** (the default): live updates use a channel that only
+     ever delivers rows RLS lets you read; the whiteboard uses a private, members-only channel.
+   - Optional: Supabase's built-in mailer only sends a few emails per hour. That's enough for a family of four; if
+     emails stop arriving, add your own SMTP under *Authentication → Emails → SMTP Settings*.
+3. **Apply the schema** (on your computer, in this repo, Node 22+):
    ```bash
-   npx supabase login
-   npx supabase link --project-ref <your-project-ref>
-   npx supabase db push
+   npx supabase login                                 # opens the browser to authorize the CLI
+   npx supabase link --project-ref <your-project-ref> # the id in your dashboard URL; asks for the DB password
+   npx supabase db push                               # applies everything in supabase/migrations
    ```
-3. **Make yourself the admin + get the family code:** Supabase dashboard → SQL Editor → run
+4. **Make yourself the admin + get the family code:** dashboard → *SQL Editor* → *New query* → run
    ```sql
    select public.add_admin_email('you@example.com');  -- your real email
    select code from family_invite;                     -- or: update family_invite set code = 'YOUR-CODE';
    ```
    Whoever signs up with that (confirmed) email is always an admin, and nobody else becomes admin by joining
    first. You can add more owner emails the same way. Owner emails live only in the database, never in git.
-4. **GitHub:** push this repo to GitHub. *Settings → Pages → Source: GitHub Actions*.
-   *Settings → Secrets and variables → Actions → Variables*: add `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_PUBLISHABLE_KEY` (Project Settings → API Keys in Supabase). These are public by design;
-   the database's row-level security is what protects data. **Never** put the secret/service-role key in GitHub
-   variables or any `VITE_` variable.
-5. Push to `main` → the workflow lints, tests, builds and deploys.
-6. **Join.** Open the site, enter the family code and create your account with the owner email, then click the
-   confirmation link in your inbox (same device). You land in the app as admin — check that *Family admin*
-   appears in the menu. Change your password any time in *Profile & Settings → Account*. Then share the
-   link + code with the family.
+5. **GitHub:** *Settings → Pages → Build and deployment → Source: GitHub Actions*.
+   *Settings → Secrets and variables → Actions → Variables* tab → *New repository variable*, twice:
+   `VITE_SUPABASE_URL` (Supabase *Project Settings → Data API*, "Project URL") and `VITE_SUPABASE_PUBLISHABLE_KEY`
+   (*Project Settings → API Keys*, the `sb_publishable_…` key). These are public by design; RLS protects the data.
+   **Never** put the secret/service-role key in GitHub variables or any `VITE_` variable.
+6. **Deploy:** merge into `main` (or push to it). *Actions* tab → "Deploy to GitHub Pages" runs lint, tests and the
+   build with `BASE_PATH=/<repo>/`, then publishes. Re-run it any time with *Run workflow*.
+7. **Join.** Open the site, enter the family code, create your account with the owner email, then click the
+   confirmation link in your inbox (same device, same browser). You land in the app as admin — *Family admin*
+   appears in the menu. Share the link + code with the family. Once everyone has joined, switch **Open to new
+   members** off in *Family admin*.
+8. **Install it** (each phone): Android/Chrome → menu → *Install app* (or *Add to Home screen*); iPhone/Safari →
+   Share → *Add to Home Screen*. It then opens full-screen, works offline with the last data it saw, and queues
+   changes made offline until the connection is back.
+
+Later deploys: merge/push to `main`. Open apps show "A new version of Tabi is ready — Reload". Schema changes need
+`npx supabase db push` **before** the new site goes live.
 
 Do not run `seed:dev` against the production project.
+
+## Troubleshooting
+
+- `npm run db:start` fails pulling images (registry blocked on your network): run
+  `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npx supabase start` to pull from Docker Hub instead.
+- A reset or confirmation link "does nothing": it must be opened in the same browser that asked for it (PKCE), and
+  the site URL must be listed under *Authentication → URL Configuration → Redirect URLs*.

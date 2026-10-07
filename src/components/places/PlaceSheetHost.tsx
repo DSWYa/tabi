@@ -49,8 +49,8 @@ export function PlaceSheetHost() {
         submitLabel="Add place"
         onCancel={sheet.close}
         onSubmit={async (input) => {
-          const created = await create.mutateAsync(input)
-          sheet.showDetail(created.id)
+          const { place } = await create.mutateAsync(input)
+          sheet.showDetail(place.id)
         }}
       />
     )

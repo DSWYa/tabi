@@ -1,4 +1,6 @@
+import { get, set } from 'idb-keyval'
 import type { Json } from './database.types'
+import { OFFLINE_SCENE_KEY } from './queryPersist'
 import { publicUrl, supabase } from './supabase'
 import { imageExtension, type FileMap, type SceneElement } from './whiteboardSync'
 
@@ -23,6 +25,27 @@ export async function fetchWhiteboard(): Promise<WhiteboardRow> {
     version: data.version,
     updated_at: data.updated_at,
     updated_by: data.updated_by,
+  }
+}
+
+/** Keep the latest board on this device so it can be looked at (read-only) offline. Best effort. */
+export function cacheWhiteboardScene(row: WhiteboardRow): void {
+  void set(OFFLINE_SCENE_KEY, row).catch(() => undefined)
+}
+
+/**
+ * The board for the whiteboard page: live when the server answers, otherwise the copy saved on this device
+ * (marked `offline`, shown read-only) — and only if there is none does it fail.
+ */
+export async function loadWhiteboard(): Promise<WhiteboardRow & { offline?: boolean }> {
+  try {
+    const row = await fetchWhiteboard()
+    cacheWhiteboardScene(row)
+    return row
+  } catch (error) {
+    const cached = await get<WhiteboardRow>(OFFLINE_SCENE_KEY).catch(() => undefined)
+    if (cached && Array.isArray(cached.elements)) return { ...cached, offline: true }
+    throw error
   }
 }
 

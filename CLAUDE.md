@@ -11,13 +11,16 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/DATA_MODEL.md
 - TanStack Query for server state; no other state library
 - Supabase: Auth (email/password), Postgres + RLS, Realtime, Storage. No custom server.
 - Leaflet 1.9 + leaflet.markercluster (plain, imperative; lazy chunks only), Excalidraw 0.18 (lazy whiteboard route,
-  self-hosted fonts), dnd-kit (itinerary). Planned: vite-plugin-pwa
+  self-hosted fonts), dnd-kit (itinerary)
+- Offline: vite-plugin-pwa (service worker precaches the app shell), TanStack Query cache persisted to IndexedDB
+  (`lib/queryPersist`), IndexedDB outbox for member writes (`lib/outbox` + `lib/outboxRuntime`), idb-keyval
 - Browser-side services, no keys: Nominatim (geocoding, cached in `geocode_cache`, ≤1 req/s), Frankfurter (JPY→USD)
 
 ## Commands
 ```
 npm run dev          # http://localhost:5173 (needs .env.local)
-npm run db:start     # local Supabase in Docker (first run downloads images)
+npm run db:start     # local Supabase in Docker (first run downloads images; if AWS/GHCR registries are blocked:
+                     #   SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npx supabase start)
 npm run db:reset     # re-apply supabase/migrations to local DB
 npm run seed:dev     # 4 fictional members + Tokyo sample data (seed:clear to remove)
 npm run db:test      # pgTAP permission tests in supabase/tests
@@ -57,6 +60,13 @@ Local dev login after seeding: `morgan@tabi.test` (admin) / casey / riley / jami
 - Admin-ordered lists (itinerary slots, Travel Info) are reordered by RPCs that renumber server-side; mirror the rule
   in a pure helper for the optimistic update (`applyMove`, `applySectionMove`).
 - Use `mutateAsync` (not `mutate(vars, callbacks)`) when the calling component may unmount from an optimistic update.
+- Member writes that must work offline (place create/update, votes, suggestions) go through `outbox.submit()` with a
+  client UUID; the query's `select` overlays what's still queued (`applyPlaceOps`, …). Don't add optimistic
+  `onMutate` patches for those — the overlay is the optimistic update. Admin actions stay online-only.
+- Notifications are written only by DB triggers via `notify()`; a new kind needs the CHECK list, `NOTIFICATION_KINDS`,
+  `notification_defaults()` and a pgTAP test.
+- Never persist secrets in the query cache: add their first query-key segment to `NEVER_PERSIST` (`lib/queryPersist`).
+- New in-app pages that aren't the first screen should be `lazy()` routes (the service worker precaches them anyway).
 - Form inputs use `<Field>` / `<FormMessage>` from `components/ui/Field`.
 
 ## Working with the owner
@@ -65,8 +75,9 @@ Local dev login after seeding: `morgan@tabi.test` (admin) / casey / riley / jami
 - End each phase with: run lint/typecheck/tests/db tests/build, update ROADMAP, a concise summary, and the next phase's prompt.
 
 ## Status
-Phases 1–4 complete (foundation; accounts & admin tools; places, voting, plans & map; itinerary, whiteboard & travel
-info). **Next: Phase 5 — offline, notifications, polish & deploy.** See ROADMAP.
+Phases 1–5 complete in code (foundation; accounts & admin tools; places, voting, plans & map; itinerary, whiteboard
+& travel info; offline/PWA, notifications, polish). **Remaining: the owner's production Supabase setup + first
+GitHub Pages deploy (README → "Production setup").** Later ideas are listed in ROADMAP.
 
 ## Deployment
 GitHub Actions (`.github/workflows/deploy.yml`) builds on push to `main` with `BASE_PATH=/<repo>/` and

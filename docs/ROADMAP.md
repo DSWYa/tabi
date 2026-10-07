@@ -46,19 +46,38 @@
       links/phone numbers in Travel Info, whiteboard grant fix (members really can only write elements/files),
       no SVG uploads, pgTAP + unit tests for all of it
 
-## Phase 5 — Offline, notifications, polish & deploy
-- [ ] PWA (installable), offline read cache, outbox queue + "Pending sync" UI
-- [ ] Realtime across all data
-- [ ] Notifications (DB triggers + in-app center; optional web push)
-- [ ] Accessibility, performance and mobile QA passes
-- [ ] Production Supabase setup + first GitHub Pages deploy
-- [ ] "Forgot password" flow (reset email → set new password screen)
-- [ ] Clean up a removed member's avatar files (Storage API; SQL can't delete objects)
-- [ ] Optional admin toggle for `family_invite.enabled` ("close the family" once everyone has joined)
-- [ ] Main chunk is ~170 kB gzip after Phase 4; lazy-load Voting/Plans/Admin if it keeps growing
-- [ ] Offline: queue place creates/votes in the outbox; geocoding already retries pending places on next load
-- [ ] Notifications for itinerary changes and suggestion submitted/reviewed (kinds already exist in the DB)
-- [ ] Whiteboard: delete images no element references any more (Storage API, like avatars); offline edits are
-      kept in memory only today (saved on reconnect while the tab stays open)
-- [ ] Whiteboard: cache the scene for offline reading; consider lazy-loading the CJK font subset only when needed
-- [ ] Itinerary: optional "sort this slot by time" button for the admin
+## Phase 5 — Offline, notifications, polish & deploy ✅ (code) · deploy = owner steps in README
+- [x] PWA (installable): vite-plugin-pwa, manifest + icons (incl. maskable / Apple touch), works under the Pages
+      `BASE_PATH`, precaches the app shell (entry, our lazy routes, Latin Excalidraw fonts; ~3 MB), runtime-caches
+      the CJK font subsets, Excalidraw extras, avatars/whiteboard images and viewed OSM tiles; "New version — Reload"
+      banner (never reloads on its own)
+- [x] Offline read cache: TanStack Query cache persisted to IndexedDB (14 days, versioned, never the family code;
+      cleared on sign-out or when another account signs in); pages keep showing cached data when a refresh fails
+- [x] Outbox (IndexedDB) for place creates/edits, votes and itinerary suggestions: client UUIDs, strict order,
+      edits folded into unsent creates, last vote wins, duplicate inserts treated as done, refused changes reported;
+      Web Locks + BroadcastChannel across tabs; "Pending sync" chip + sheet, per-item badges, sign-out warning
+- [x] Realtime across all data (added notifications and, for admins, the family invite)
+- [x] Notifications written by DB triggers per recipient, respecting `notification_prefs` (place added, vote cast,
+      status changed, itinerary changed, suggestion submitted/reviewed, upcoming reservation); bursts collapse;
+      in-app center (`#/notifications`), bell with unread count, live toast
+- [x] Reservation reminders without a scheduler: `send_reservation_reminders()` (members' apps call it hourly;
+      each entry announced once per day, today/tomorrow in trip time)
+- [x] "Forgot password" flow (reset email → "New password" screen → straight into the app)
+- [x] Unused files cleaned up via the Storage API: removed members' avatars, replaced avatars, whiteboard images no
+      longer on the board (a day's grace for Undo); daily per device + "Clean up unused files" for the admin
+- [x] Admin toggle for `family_invite.enabled` ("Open to new members")
+- [x] Accessibility pass (axe-core on every page, phone + desktop, light + dark): accent text contrast raised to
+      ≥ 5:1, calendar day names, map cluster names, Leaflet attribution contrast, Excalidraw menu label
+- [x] Performance pass: Voting, Plans, Itinerary, Travel Info, Settings, Admin and Notifications are lazy routes
+      (entry chunk 173 → 104 kB gzip; ~215 kB gzip of JS on first load including the shared chunks it preloads)
+- [x] Mobile QA (390 px screenshots of every page, offline/online round trip, two-member realtime)
+- [x] Whiteboard: the last board seen is kept on the device and shown read-only offline (fonts + seen images
+      included); CJK font subsets are only fetched when CJK text is drawn, then cached
+- [ ] **Production Supabase setup + first GitHub Pages deploy** — owner steps in README ("Production setup")
+
+## Later (not scheduled)
+- Optional web push (needs VAPID keys + a Supabase Edge Function; in-app notifications cover the family for now)
+- Itinerary: optional "sort this slot by time" button for the admin
+- Offline whiteboard *editing* (today: view-only offline; edits made while the tab is open but the connection
+  drops are still kept in memory and saved on reconnect)
+- Background Sync (send the outbox while the app is closed) — today it's sent the next time the app is open

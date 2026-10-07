@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { CalendarDays, Check, Copy, Crown, KeyRound, Loader2, RefreshCw, Settings2, ShieldCheck, UserMinus, UserRound, Users } from 'lucide-react'
+import {
+  CalendarDays, Check, Copy, Crown, DoorClosed, DoorOpen, HardDrive, KeyRound, Loader2, RefreshCw, Settings2, ShieldCheck, Sparkles,
+  UserMinus, UserRound, Users,
+} from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Avatar } from '@/components/Avatar'
 import { PageHeader } from '@/components/PageHeader'
@@ -13,6 +16,8 @@ import { EmptyState, ErrorState, SkeletonCard } from '@/components/ui/States'
 import { pinColorByKey, type PinColorKey } from '@/lib/constants'
 import { friendlyError } from '@/lib/join'
 import { useMe } from '@/lib/members'
+import { ensureAffected } from '@/lib/places'
+import { cleanUpUnusedFiles } from '@/lib/storageCleanup'
 import { supabase, type Profile, type Trip } from '@/lib/supabase'
 import { tripKey, useTrip } from '@/lib/trip'
 
@@ -30,6 +35,7 @@ export default function Admin() {
         <TripCard />
         <FamilyCodeCard />
         <MembersCard me={me} />
+        <StorageCard />
       </div>
     </>
   )
@@ -46,7 +52,7 @@ function TripCard() {
       <CardHeader title="Trip" icon={<CalendarDays className="size-4" />} />
       {trip.isPending ? (
         <SkeletonCard lines={3} />
-      ) : trip.isError ? (
+      ) : trip.isError && !trip.data ? (
         <ErrorState message="Couldn't load the trip." onRetry={() => void trip.refetch()} />
       ) : (
         // Re-mount the form when the saved row changes (e.g. another admin edits it).
@@ -118,6 +124,27 @@ function FamilyCodeCard() {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
 
+  type Invite = { code: string; enabled: boolean }
+  const setOpen = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const { data, error } = await supabase.from('family_invite').update({ enabled }).eq('id', 1).select('enabled')
+      if (error) throw error
+      ensureAffected(data, 'change who can join')
+    },
+    onMutate: async (enabled) => {
+      setError('')
+      await queryClient.cancelQueries({ queryKey: inviteKey })
+      const previous = queryClient.getQueryData<Invite>(inviteKey)
+      queryClient.setQueryData<Invite>(inviteKey, (old) => (old ? { ...old, enabled } : old))
+      return { previous }
+    },
+    onError: (e, _v, context) => {
+      if (context?.previous) queryClient.setQueryData(inviteKey, context.previous)
+      setError(friendlyError(e))
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: inviteKey }),
+  })
+
   const rotate = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.rpc('rotate_family_code')
@@ -146,14 +173,48 @@ function FamilyCodeCard() {
   return (
     <Card className="animate-rise">
       <CardHeader title="Family code" icon={<KeyRound className="size-4" />} />
-      <p className="mb-3 text-sm text-muted">Share this with family so they can join. Anyone with the code can create a member account.</p>
+      <p className="mb-3 text-sm text-muted">
+        Share this with family so they can join. Anyone with the code can create a member account — once everyone's in,
+        switch joining off.
+      </p>
       {invite.isPending ? (
         <SkeletonCard lines={1} />
-      ) : invite.isError ? (
+      ) : invite.isError && !invite.data ? (
         <ErrorState message="Couldn't load the code." onRetry={() => void invite.refetch()} />
       ) : (
         <>
-          <p className="mb-3 rounded-2xl bg-surface-2 px-4 py-3 text-center font-mono text-2xl font-black tracking-[0.2em] break-all select-all">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={invite.data.enabled}
+            disabled={setOpen.isPending}
+            onClick={() => setOpen.mutate(!invite.data.enabled)}
+            className="mb-3 flex min-h-14 w-full items-center gap-3 rounded-2xl border border-border bg-bg px-3.5 py-2 text-left"
+          >
+            {invite.data.enabled ? (
+              <DoorOpen className="size-5 shrink-0 text-ok-fg" aria-hidden />
+            ) : (
+              <DoorClosed className="size-5 shrink-0 text-bad-fg" aria-hidden />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-extrabold">Open to new members</span>
+              <span className="block text-xs text-muted">
+                {invite.data.enabled ? 'Anyone with the code can join.' : 'Closed — the code doesn’t work until you open it again.'}
+              </span>
+            </span>
+            <span className={clsx('text-xs font-bold', invite.data.enabled ? 'text-ok-fg' : 'text-muted')}>
+              {invite.data.enabled ? 'On' : 'Off'}
+            </span>
+            <span aria-hidden className={clsx('relative h-7 w-12 shrink-0 rounded-full transition', invite.data.enabled ? 'bg-accent' : 'bg-surface-2 ring-1 ring-border')}>
+              <span className={clsx('absolute top-1 size-5 rounded-full bg-surface shadow-card transition-all', invite.data.enabled ? 'left-6' : 'left-1')} />
+            </span>
+          </button>
+          <p
+            className={clsx(
+              'mb-3 rounded-2xl bg-surface-2 px-4 py-3 text-center font-mono text-2xl font-black tracking-[0.2em] break-all select-all',
+              !invite.data.enabled && 'text-muted line-through decoration-2',
+            )}
+          >
             {invite.data.code}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -260,6 +321,8 @@ function ManageMemberSheet({ member, isSelf, onClose }: { member: Profile; isSel
     onSuccess: async () => {
       await refresh()
       onClose()
+      // Their profile photo is unused now; tidy it up (best effort — the daily cleanup catches anything missed).
+      void cleanUpUnusedFiles().catch(() => undefined)
     },
     onError: (e) => setError(friendlyError(e)),
   })
@@ -320,7 +383,7 @@ function ManageMemberSheet({ member, isSelf, onClose }: { member: Profile; isSel
               <p className="text-sm font-bold">Remove {member.display_name}?</p>
               <p className="mt-1 text-sm">
                 They lose access right away and their votes and suggestions are deleted; places they added stay.
-                They could rejoin with the family code, so make a new code if that matters.
+                They could rejoin with the family code, so make a new code or switch joining off if that matters.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" className="min-h-11" onClick={() => setConfirmRemove(false)}>Keep</Button>
@@ -340,5 +403,30 @@ function ManageMemberSheet({ member, isSelf, onClose }: { member: Profile; isSel
         </p>
       )}
     </Sheet>
+  )
+}
+
+function StorageCard() {
+  const [result, setResult] = useState<Result>(null)
+  const clean = useMutation({
+    mutationFn: cleanUpUnusedFiles,
+    onMutate: () => setResult(null),
+    onSuccess: (removed) =>
+      setResult({ tone: 'success', text: removed ? `Removed ${removed} unused file${removed === 1 ? '' : 's'}.` : 'Nothing to clean up.' }),
+    onError: (e) => setResult({ tone: 'error', text: friendlyError(e) }),
+  })
+  return (
+    <Card className="animate-rise lg:col-span-2">
+      <CardHeader title="Storage" icon={<HardDrive className="size-4" />} />
+      <p className="mb-3 text-sm text-muted">
+        Photos of removed members, replaced profile photos and images taken off the whiteboard are deleted automatically
+        once a day (images a day after they leave the board, so Undo still works). You can also do it now.
+      </p>
+      {result && <FormMessage tone={result.tone} className="mb-3">{result.text}</FormMessage>}
+      <Button variant="secondary" disabled={clean.isPending} onClick={() => clean.mutate()}>
+        {clean.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+        Clean up unused files
+      </Button>
+    </Card>
   )
 }

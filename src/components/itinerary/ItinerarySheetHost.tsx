@@ -23,6 +23,8 @@ function schedulablePlaces(places: Place[], selectedId?: string | null): Place[]
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+const OFFLINE_NOTE = 'You’re offline, so it’s saved on this device and will be sent as soon as you’re back online.'
+
 /** The one itinerary sheet for the whole app (mounted in AppShell); driven by the URL — see useItinerarySheet. */
 export function ItinerarySheetHost() {
   const sheet = useItinerarySheet()
@@ -110,8 +112,9 @@ export function ItinerarySheetHost() {
         numberOf={numberOf}
         onCancel={sheet.close}
         onSubmit={async (input) => {
-          await suggest.mutateAsync(input)
-          setSent('It shows up under “Suggestions” on the itinerary until it’s reviewed.')
+          const what = (input.place_id && placeName(input.place_id)) || input.title || 'a stop'
+          const { queued } = await suggest.mutateAsync({ input, label: `Suggest “${what}”` })
+          setSent(queued ? OFFLINE_NOTE : 'It shows up under “Suggestions” on the itinerary until it’s reviewed.')
         }}
       />
     )
@@ -149,8 +152,8 @@ export function ItinerarySheetHost() {
           numberOf={numberOf}
           onCancel={() => sheet.openItem(item.id)}
           onSubmit={async (input) => {
-            await suggest.mutateAsync(input)
-            setSent(`You suggested a new time for ${name}.`)
+            const { queued } = await suggest.mutateAsync({ input, label: `Suggest a new time for “${name}”` })
+            setSent(queued ? OFFLINE_NOTE : `You suggested a new time for ${name}.`)
           }}
         />
       )

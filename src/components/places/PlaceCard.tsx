@@ -1,7 +1,8 @@
 import { clsx } from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { CategoryBadge, StatusBadge } from '@/components/badges'
+import { CategoryBadge, PendingSyncBadge, StatusBadge } from '@/components/badges'
+import { usePendingSync } from '@/lib/outboxRuntime'
 import type { Place } from '@/lib/places'
 import type { Profile } from '@/lib/supabase'
 import type { VoteTally } from '@/lib/votes'
@@ -17,6 +18,7 @@ export function PlaceCard({ place, addedBy, tally, onOpen, extra, className }: {
   extra?: ReactNode
   className?: string
 }) {
+  const pending = usePendingSync()
   return (
     <article className={clsx('rounded-card border border-border bg-surface shadow-card animate-rise', className)}>
       <button
@@ -28,6 +30,7 @@ export function PlaceCard({ place, addedBy, tally, onOpen, extra, className }: {
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="min-w-0 text-base font-extrabold break-words">{place.name}</span>
             <StatusBadge status={place.status} />
+            {(pending.places.has(place.id) || pending.votes.has(place.id)) && <PendingSyncBadge />}
           </span>
           <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <CategoryBadge category={place.category} />

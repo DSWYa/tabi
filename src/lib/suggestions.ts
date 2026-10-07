@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { useAuth } from './auth'
 import type { DaySlot, SuggestionStatus } from './constants'
 import {
   formatDay, formatItemWhen, itemName, itineraryKey, slotLabel, sortItinerary, sortOrderFor, type ItineraryItem,
 } from './itinerary'
 import type { SuggestionInput } from './itineraryForm'
-import { ensureAffected, placesKey, type Place } from './places'
+import { applySuggestionOps, pendingSuggestionIds } from './outbox'
+import { outbox, useOutbox } from './outboxRuntime'
+import { ensureAffected, opBase, placesKey, type Place, type Submitted } from './places'
 import { supabase, type Tables } from './supabase'
 
 // Members propose itinerary changes; the admin approves (which applies them, atomically, in
@@ -19,6 +22,9 @@ export type Suggestion = Omit<Tables<'itinerary_suggestions'>, 'slot' | 'status'
 
 export function useSuggestions() {
   const { session } = useAuth()
+  const { ops } = useOutbox()
+  // Suggestions sent while offline show up right away (and say they're waiting to sync).
+  const select = useCallback((rows: Suggestion[]) => applySuggestionOps(rows, ops), [ops])
   return useQuery({
     queryKey: suggestionsKey,
     enabled: Boolean(session),
@@ -27,6 +33,7 @@ export function useSuggestions() {
       if (error) throw error
       return data as Suggestion[]
     },
+    select,
   })
 }
 
@@ -114,16 +121,33 @@ export function suggestablePlaces(places: Place[]): Place[] {
     .sort((a, b) => (a.status === b.status ? 0 : a.status === 'in_plan' ? -1 : 1) || a.name.localeCompare(b.name))
 }
 
+/** The row as the server will store it (suggestions_guard forces status and author anyway). */
+export function newSuggestionRow(input: SuggestionInput, uid: string, id: string = crypto.randomUUID()): Suggestion {
+  const now = new Date().toISOString()
+  return {
+    ...input,
+    id,
+    status: 'pending',
+    suggested_by: uid,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_note: null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
+/** Members suggest a stop or a move. Goes through the outbox, so it works offline. */
 export function useCreateSuggestion() {
-  const queryClient = useQueryClient()
+  const { session } = useAuth()
+  const uid = session?.user.id
   return useMutation({
-    mutationFn: async (input: SuggestionInput) => {
-      const { data, error } = await supabase.from('itinerary_suggestions').insert(input).select('*').single()
-      if (error) throw error
-      return data as Suggestion
+    mutationFn: async ({ input, label }: { input: SuggestionInput; label: string }): Promise<Submitted & { suggestion: Suggestion }> => {
+      if (!uid) throw new Error('Not signed in')
+      const suggestion = newSuggestionRow(input, uid)
+      const result = await outbox.submit({ ...opBase(uid, label), kind: 'suggestion.create', row: suggestion })
+      return { suggestion, queued: result === 'queued' }
     },
-    onSuccess: (row) => queryClient.setQueryData<Suggestion[]>(suggestionsKey, (rows) => [row, ...(rows ?? [])]),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: suggestionsKey }),
   })
 }
 
@@ -132,6 +156,10 @@ export function useWithdrawSuggestion() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => {
+      // Not sent yet? Then withdrawing it means not sending it.
+      if (pendingSuggestionIds(outbox.getSnapshot().ops).has(id)) {
+        return outbox.discard((o) => o.kind === 'suggestion.create' && o.row.id === id)
+      }
       const { data, error } = await supabase.from('itinerary_suggestions').delete().eq('id', id).select('id')
       if (error) throw error
       ensureAffected(data, 'withdraw this suggestion')

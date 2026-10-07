@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useAuth } from './auth'
 import { itineraryKey } from './itinerary'
+import { announceNotification, notificationsKey, type AppNotification } from './notifications'
 import { placesKey, votesKey } from './places'
 import { suggestionsKey } from './suggestions'
 import { supabase } from './supabase'
@@ -9,9 +10,9 @@ import { travelKey } from './travelInfo'
 import { tripKey } from './trip'
 
 /**
- * Keeps members, trip, places, votes, the itinerary, suggestions and Travel Info live (the whiteboard has its own
- * channel). Realtime respects RLS; any change simply refetches the (tiny) query, so we never have to merge partial
- * payloads by hand.
+ * Keeps members, trip, places, votes, the itinerary, suggestions, Travel Info, my notifications and (for admins) the
+ * family invite live (the whiteboard has its own channel). Realtime respects RLS; any change simply refetches the
+ * (tiny) query, so we never have to merge partial payloads by hand.
  */
 export function useCoreRealtime() {
   const { session } = useAuth()
@@ -43,6 +44,14 @@ export function useCoreRealtime() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_sections' }, () => {
         queryClient.invalidateQueries({ queryKey: travelKey })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, (payload) => {
+        queryClient.invalidateQueries({ queryKey: notificationsKey(uid) })
+        if (payload.eventType === 'INSERT') announceNotification(payload.new as AppNotification)
+      })
+      // Only admins can read the invite row, so only they get these events.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'family_invite' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['family_invite'] })
       })
       .subscribe((status) => {
         // After a dropped connection we may have missed events: refetch everything once we're back.

@@ -2,6 +2,7 @@ import { clsx } from 'clsx'
 import { useState } from 'react'
 import { FormMessage } from '@/components/ui/Field'
 import { VOTES, type VoteValue } from '@/lib/constants'
+import { useOnline, usePendingSync } from '@/lib/outboxRuntime'
 import { placeErrorMessage, useCastVote } from '@/lib/places'
 import { voteIcons } from './voteStyle'
 
@@ -15,6 +16,8 @@ const selectedStyle: Record<VoteValue, string> = {
 export function VoteControl({ placeId, placeName, myVote }: { placeId: string; placeName: string; myVote: VoteValue | undefined }) {
   const cast = useCastVote()
   const [error, setError] = useState('')
+  const waiting = usePendingSync().votes.has(placeId)
+  const online = useOnline()
 
   function choose(vote: VoteValue) {
     setError('')
@@ -49,6 +52,9 @@ export function VoteControl({ placeId, placeName, myVote }: { placeId: string; p
           )
         })}
       </div>
+      {waiting && !online && (
+        <p role="status" className="mt-2 text-xs font-bold text-muted">Saved on this device — it’s sent when you’re back online.</p>
+      )}
       <FormMessage tone="error" className="mt-2">{error}</FormMessage>
     </div>
   )

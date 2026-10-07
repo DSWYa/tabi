@@ -52,7 +52,8 @@ export function clusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const count = cluster.getChildCount()
   const size = count < 10 ? 38 : count < 50 ? 44 : 50
   return L.divIcon({
-    html: `<span aria-hidden="true">${count}</span>`,
+    // Clusters are keyboard-focusable buttons, so they need a name.
+    html: `<span class="sr-only">${count} places here — zoom in</span><span aria-hidden="true">${count}</span>`,
     className: 'tabi-cluster',
     iconSize: [size, size],
   })

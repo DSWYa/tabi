@@ -34,3 +34,10 @@ it('pin colors are distinct hex values', () => {
   const hexes = PIN_COLORS.map((c) => c.hex.toLowerCase())
   expect(new Set(hexes).size).toBe(hexes.length)
 })
+
+it('notification defaults match notification_defaults() in the database', () => {
+  const match = migration.match(/function public\.notification_defaults\(\)[\s\S]*?select '(\{[^']*\})'::jsonb/)
+  expect(match).not.toBeNull()
+  const sql = JSON.parse(match![1]) as Record<string, boolean>
+  expect(sql).toEqual(Object.fromEntries(NOTIFICATION_KINDS.map((n) => [n.key, n.default])))
+})

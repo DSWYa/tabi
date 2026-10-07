@@ -19,7 +19,7 @@
   --accent-bright: #f28a3c; /* decorative: logo, highlights */
   --accent-fg: #ffffff;
   --accent-soft: #fde7d3;
-  --accent-text: #b8490a;   /* links / accent text on bg */
+  --accent-text: #a94308;   /* links / accent text on bg and on accent-soft (≥ 5:1 on both) */
   --accent-2: #2f6fb3;
   --ring: #f28a3c;
   --shadow: 0 1px 2px rgb(76 50 20 / 0.06), 0 6px 20px -8px rgb(76 50 20 / 0.18);
@@ -146,11 +146,11 @@ dialog.sheet::backdrop {
 .tabi-map .leaflet-bar a:hover {
   background: var(--surface-2);
 }
-.tabi-map .leaflet-control-attribution {
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
+.tabi-map.leaflet-container .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   color: var(--muted);
 }
-.tabi-map .leaflet-control-attribution a {
+.tabi-map.leaflet-container .leaflet-control-attribution a {
   color: var(--accent-text);
 }
 /* Dark theme: invert the light OSM tiles rather than fetching a second tile set. */

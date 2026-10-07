@@ -2,6 +2,7 @@ import { clsx } from 'clsx'
 import { ArrowRight, Check, CheckCircle2, Hourglass, Loader2, MessageSquarePlus, Undo2, X, XCircle } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Avatar } from '@/components/Avatar'
+import { PendingSyncBadge } from '@/components/badges'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -9,6 +10,7 @@ import { describedBy } from '@/components/ui/fieldAria'
 import { FieldShell, FormMessage, inputClass } from '@/components/ui/Field'
 import { LIMITS, suggestionStatusByKey, type SuggestionStatus } from '@/lib/constants'
 import { itineraryErrorMessage, type ItineraryItem } from '@/lib/itinerary'
+import { usePendingSync } from '@/lib/outboxRuntime'
 import type { Profile } from '@/lib/supabase'
 import { describeSuggestion, splitSuggestions, useReviewSuggestion, useWithdrawSuggestion, type Suggestion } from '@/lib/suggestions'
 
@@ -51,6 +53,8 @@ function PendingRow({ s, items, placeName, author, meId, isAdmin, onResult }: {
   const [error, setError] = useState('')
   const noteId = useId()
   const mine = s.suggested_by === meId
+  // Sent from this device while offline and not on the server yet: nothing to review until it arrives.
+  const unsent = usePendingSync().suggestions.has(s.id)
   const what = describeSuggestion(s, items, placeName).what
 
   async function decide(approve: boolean) {
@@ -71,6 +75,7 @@ function PendingRow({ s, items, placeName, author, meId, isAdmin, onResult }: {
       <div className="mb-1.5 flex items-center gap-2 text-xs text-muted">
         {author && <Avatar profile={author} className="size-6 text-[10px]" />}
         <span className="font-bold">{mine ? 'You' : author?.display_name ?? 'A former member'} suggested</span>
+        {unsent && <PendingSyncBadge />}
       </div>
       <Summary s={s} items={items} placeName={placeName} />
       {s.note && <p className="mt-2 rounded-xl bg-surface-2 px-3 py-2 text-sm whitespace-pre-wrap">“{s.note}”</p>}
@@ -91,7 +96,7 @@ function PendingRow({ s, items, placeName, author, meId, isAdmin, onResult }: {
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {isAdmin && (
+        {isAdmin && !unsent && (
           <>
             <Button size="sm" className="min-h-11" disabled={review.isPending} onClick={() => void decide(true)}>
               {review.isPending && review.variables?.approve ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}

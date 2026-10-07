@@ -17,7 +17,8 @@ export function usePlaceBoard() {
   return {
     places: places.data,
     isPending: places.isPending || votes.isPending,
-    isError: places.isError || votes.isError,
+    // A failed refresh keeps the cached data (offline reading); only "nothing to show" is an error.
+    isError: (places.isError && !places.data) || (votes.isError && !votes.data),
     refetch: () => Promise.all([places.refetch(), votes.refetch()]),
     me,
     isAdmin,

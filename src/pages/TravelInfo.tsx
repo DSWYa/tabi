@@ -90,7 +90,7 @@ export default function TravelInfo() {
           <SkeletonCard lines={3} />
           <SkeletonCard lines={3} />
         </div>
-      ) : sections.isError ? (
+      ) : sections.isError && !sections.data ? (
         <Card>
           <ErrorState message="Couldn't load Travel Info." onRetry={() => void sections.refetch()} />
         </Card>

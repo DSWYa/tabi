@@ -1,0 +1,208 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/nunito';
+
+/* Dark mode follows the resolved theme on <html data-theme="…">, not the OS directly. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ---- Design tokens ---------------------------------------------------------
+   Every color the UI uses is a token so light/dark stay in sync.
+   Contrast: text ≥ 4.5:1 on bg/surface; accent-fg on accent ≥ 4.5:1. */
+:root {
+  color-scheme: light;
+  --bg: #fbf6ee;
+  --surface: #ffffff;
+  --surface-2: #f5ede1;
+  --border: #eadfcf;
+  --text: #2b2118;
+  --muted: #6f5f50;
+  --accent: #c44e0a;        /* buttons, active states */
+  --accent-bright: #f28a3c; /* decorative: logo, highlights */
+  --accent-fg: #ffffff;
+  --accent-soft: #fde7d3;
+  --accent-text: #b8490a;   /* links / accent text on bg */
+  --accent-2: #2f6fb3;
+  --ring: #f28a3c;
+  --shadow: 0 1px 2px rgb(76 50 20 / 0.06), 0 6px 20px -8px rgb(76 50 20 / 0.18);
+
+  --ok-bg: #dcf3e3;   --ok-fg: #1d6b3a;
+  --warn-bg: #fdf0c8; --warn-fg: #7a5200;
+  --bad-bg: #fde0dd;  --bad-fg: #a3261b;
+  --info-bg: #dde9fb; --info-fg: #1f4f8f;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #1a1330;
+  --surface: #251b42;
+  --surface-2: #30245a;
+  --border: #3d3070;
+  --text: #f1ecff;
+  --muted: #b4a9d6;
+  --accent: #b79cff;
+  --accent-bright: #c4b0ff;
+  --accent-fg: #1a1330;
+  --accent-soft: #3a2c6e;
+  --accent-text: #c4b0ff;
+  --accent-2: #8ec5ff;
+  --ring: #8ec5ff;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -10px rgb(0 0 0 / 0.55);
+
+  --ok-bg: #1f3d34;   --ok-fg: #8fe0b0;
+  --warn-bg: #45381a; --warn-fg: #f6d27a;
+  --bad-bg: #4a1f33;  --bad-fg: #ffb0bd;
+  --info-bg: #1f2f57; --info-fg: #a9cdff;
+}
+
+@theme inline {
+  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-accent-2: var(--accent-2);
+  --color-ring: var(--ring);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-fg: var(--ok-fg);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --color-bad-bg: var(--bad-bg);
+  --color-bad-fg: var(--bad-fg);
+  --color-info-bg: var(--info-bg);
+  --color-info-fg: var(--info-fg);
+  --shadow-card: var(--shadow);
+  --radius-card: 1.25rem;
+  --animate-rise: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-sheet: sheet 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sheet {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    min-height: 100dvh;
+  }
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Native <dialog> used by <Sheet>: bottom sheet on phones, centered card on larger screens. */
+dialog.sheet::backdrop {
+  background: rgb(20 12 40 / 0.45);
+  backdrop-filter: blur(2px);
+}
+
+/* ---- Maps (Leaflet) ----------------------------------------------------------
+   Pins and cluster bubbles are plain HTML from src/components/map/leaflet.ts. leaflet.css loads later (lazy
+   chunk), so marker rules use `.leaflet-marker-icon.…` to win on specificity, not order. */
+.tabi-map {
+  isolation: isolate; /* keep Leaflet's z-indexes (up to 1000) below the app's sticky header and nav */
+  background: var(--surface-2);
+  font: inherit;
+}
+.tabi-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+}
+.tabi-map .leaflet-bar a:hover {
+  background: var(--surface-2);
+}
+.tabi-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--muted);
+}
+.tabi-map .leaflet-control-attribution a {
+  color: var(--accent-text);
+}
+/* Dark theme: invert the light OSM tiles rather than fetching a second tile set. */
+[data-theme='dark'] .tabi-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.7);
+}
+
+.leaflet-marker-icon.tabi-pin-root {
+  background: none;
+  border: 0;
+}
+.tabi-pin {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 42px;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.35));
+}
+.tabi-pin.is-dimmed {
+  opacity: 0.55;
+}
+.tabi-pin-shape {
+  position: absolute;
+  inset: 0;
+}
+.tabi-pin-icon {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+}
+.tabi-pin-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+.leaflet-marker-icon:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
+.leaflet-marker-icon.tabi-cluster {
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 800;
+  font-size: 15px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent), var(--shadow);
+}

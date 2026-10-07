@@ -1,0 +1,2 @@
+-- Intentionally empty. Dev data is created by `npm run seed:dev` (scripts/seed-dev.mjs)
+-- so the same seed works against local Supabase and a hosted dev project.

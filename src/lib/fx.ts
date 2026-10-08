@@ -89,8 +89,21 @@ export function jpyToUsd(jpy: number, usdPerJpy: number): number {
   return Math.round(jpy * usdPerJpy * 100) / 100
 }
 
-/** The cached JPY→USD rate (US dollars per yen), or null until one is known. */
-export function useUsdPerJpy(): number | null {
+/** Dollars → yen, rounded to whole yen. */
+export function usdToJpy(usd: number, usdPerJpy: number): number {
+  return Math.round(usd / usdPerJpy)
+}
+
+/** A typed amount ("1,000", "¥ 2500", "$12.50") as a number; null when empty or not a sensible amount. */
+export function parseMoney(text: string): number | null {
+  const cleaned = text.replace(/[\s,¥$￥]/g, '')
+  if (!/^\d*\.?\d+$|^\d+\.$/.test(cleaned)) return null
+  const value = Number(cleaned)
+  return Number.isFinite(value) && value <= 1e10 ? value : null
+}
+
+/** The cached JPY→USD rate with its date, or null until one is known. */
+export function useFxRate(): CachedRate | null {
   const { data } = useQuery({
     queryKey: ['fx', 'JPY', 'USD'],
     queryFn: () => getUsdPerJpy(),
@@ -99,5 +112,10 @@ export function useUsdPerJpy(): number | null {
     staleTime: FX_MAX_AGE_MS,
     retry: false,
   })
-  return data?.usdPerJpy ?? null
+  return data ?? null
+}
+
+/** The cached JPY→USD rate (US dollars per yen), or null until one is known. */
+export function useUsdPerJpy(): number | null {
+  return useFxRate()?.usdPerJpy ?? null
 }

@@ -49,6 +49,8 @@ Local dev login after seeding: `morgan@tabi.test` (admin) / casey / riley / jami
 - Colors only via theme tokens (`bg-surface`, `text-muted`, `bg-accent`…); never hard-code UI colors except category/pin colors.
 - Never convey meaning by color alone — pair with icon/label (StatusBadge, CategoryBadge do this).
 - Touch targets ≥ 44px (`min-h-11`/`size-11`). Modals use `<Sheet>` (native `<dialog>`).
+- The shell is one screen tall (`h-dvh`) and only `<main>` scrolls; the phone bottom bar is a normal flex row, not
+  `position: fixed`. Scroll position lives on `#main` (reset on navigation in `AppShell`), not on `window`.
 - Heavy features (map, whiteboard) are `lazy()` routes.
 - Schema changes: add a new file in `supabase/migrations/`, run `npm run db:reset && npm run db:types`, update
   `docs/DATA_MODEL.md`, add pgTAP tests for new rules.
@@ -75,9 +77,9 @@ Local dev login after seeding: `morgan@tabi.test` (admin) / casey / riley / jami
 - End each phase with: run lint/typecheck/tests/db tests/build, update ROADMAP, a concise summary, and the next phase's prompt.
 
 ## Status
-Phases 1–5 complete in code (foundation; accounts & admin tools; places, voting, plans & map; itinerary, whiteboard
-& travel info; offline/PWA, notifications, polish). **Remaining: the owner's production Supabase setup + first
-GitHub Pages deploy (README → "Production setup").** Later ideas are listed in ROADMAP.
+Phases 1–5 complete and deployed (foundation; accounts & admin tools; places, voting, plans & map; itinerary,
+whiteboard & travel info; offline/PWA, notifications, polish). Live at https://dswya.github.io/tabi/.
+Next ideas are listed under "Later" in ROADMAP.
 
 ## Deployment
 GitHub Actions (`.github/workflows/deploy.yml`) builds on push to `main` with `BASE_PATH=/<repo>/` and

@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 import { Ellipsis, Moon, Sun } from 'lucide-react'
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { Avatar } from '@/components/Avatar'
 import { Wordmark } from '@/components/Brand'
@@ -48,7 +48,7 @@ function MeLink({ compact }: { compact?: boolean }) {
 function Sidebar() {
   const { isAdmin } = useMe()
   return (
-    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-surface/60 px-4 py-5 lg:flex">
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface/60 px-4 py-5 lg:flex">
       <div className="mb-6 flex items-center justify-between gap-2 pl-2">
         <Wordmark />
         <NotificationBell />
@@ -85,23 +85,28 @@ function BottomNav({ onMore }: { onMore: () => void }) {
   const { isAdmin } = useMe()
   const items = navFor(isAdmin)
   const inMore = items.some((item) => !item.primary && pathname.startsWith(item.to) && item.to !== '/')
-  const tab = 'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-1.5 text-[11px] font-bold transition'
+  const tab = 'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-1.5 text-[11px] font-bold transition'
   const pill = 'grid h-8 w-14 place-items-center rounded-full transition'
 
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      className="z-30 shrink-0 border-t border-border bg-surface px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       <div className="mx-auto flex max-w-lg">
-        {items.filter((item) => item.primary).map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => clsx(tab, isActive ? 'text-accent-text' : 'text-muted')}>
+        {items.filter((item) => item.primary).map(({ to, label, short, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === '/'}
+            className={({ isActive }) => clsx(tab, isActive ? 'text-accent-text' : 'text-muted')}
+          >
             {({ isActive }) => (
               <>
                 <span className={clsx(pill, isActive && 'bg-accent-soft')}>
                   <Icon className="size-[22px]" aria-hidden />
                 </span>
-                {label}
+                <span className="max-w-full truncate">{short ?? label}</span>
               </>
             )}
           </NavLink>
@@ -146,17 +151,27 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 export function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false)
+  const { pathname } = useLocation()
   // The whiteboard is a full-screen canvas: no page padding, no scrolling page, no floating "+" over its toolbar.
-  const fullBleed = useLocation().pathname.startsWith('/whiteboard')
+  const fullBleed = pathname.startsWith('/whiteboard')
+  const mainRef = useRef<HTMLElement>(null)
 
+  // <main> is the scroller now, so the browser no longer resets it on navigation.
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0)
+  }, [pathname])
+
+  // The shell is exactly one screen tall and only <main> scrolls. With the document itself scrolling, some Android
+  // browsers (e.g. on foldables) let the visual viewport pan away from the layout viewport, dragging the
+  // `position: fixed` bottom nav along with the page. Here the nav is an ordinary flex row that can't move.
   return (
-    <div className={clsx('flex', fullBleed ? 'h-dvh' : 'min-h-dvh')}>
+    <div className="flex h-dvh overflow-hidden">
       <a href="#main" className="sr-only z-50 rounded-full bg-accent px-4 py-2 text-accent-fg focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
         Skip to content
       </a>
       <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-bg/90 px-4 pt-[env(safe-area-inset-top)] backdrop-blur lg:hidden">
+        <header className="z-20 flex shrink-0 items-center justify-between border-b border-border bg-bg px-4 pt-[env(safe-area-inset-top)] lg:hidden">
           <div className="py-2.5">
             <Wordmark />
           </div>
@@ -168,22 +183,29 @@ export function AppShell() {
           </div>
         </header>
         <main
+          ref={mainRef}
           id="main"
           tabIndex={-1}
           className={clsx(
-            'w-full flex-1 outline-none',
-            fullBleed
-              ? 'relative min-h-0 pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:pb-0'
-              : 'mx-auto max-w-5xl px-4 pt-5 pb-32 sm:px-6 lg:px-10 lg:pt-8 lg:pb-16',
+            'relative min-h-0 w-full flex-1 outline-none',
+            fullBleed ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto',
           )}
         >
-          <Suspense fallback={<SkeletonCard lines={5} />}>
-            <Outlet />
-          </Suspense>
+          {fullBleed ? (
+            <Suspense fallback={<SkeletonCard lines={5} />}>
+              <Outlet />
+            </Suspense>
+          ) : (
+            <div className="mx-auto w-full max-w-5xl px-4 pt-5 pb-28 sm:px-6 lg:px-10 lg:pt-8 lg:pb-16">
+              <Suspense fallback={<SkeletonCard lines={5} />}>
+                <Outlet />
+              </Suspense>
+            </div>
+          )}
         </main>
+        <BottomNav onMore={() => setMoreOpen(true)} />
       </div>
       {!fullBleed && <QuickAdd />}
-      <BottomNav onMore={() => setMoreOpen(true)} />
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       <PlaceSheetHost />
       <ItinerarySheetHost />

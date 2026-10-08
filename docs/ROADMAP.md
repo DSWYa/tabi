@@ -46,7 +46,7 @@
       links/phone numbers in Travel Info, whiteboard grant fix (members really can only write elements/files),
       no SVG uploads, pgTAP + unit tests for all of it
 
-## Phase 5 — Offline, notifications, polish & deploy ✅ (code) · deploy = owner steps in README
+## Phase 5 — Offline, notifications, polish & deploy ✅
 - [x] PWA (installable): vite-plugin-pwa, manifest + icons (incl. maskable / Apple touch), works under the Pages
       `BASE_PATH`, precaches the app shell (entry, our lazy routes, Latin Excalidraw fonts; ~3 MB), runtime-caches
       the CJK font subsets, Excalidraw extras, avatars/whiteboard images and viewed OSM tiles; "New version — Reload"
@@ -73,7 +73,10 @@
 - [x] Mobile QA (390 px screenshots of every page, offline/online round trip, two-member realtime)
 - [x] Whiteboard: the last board seen is kept on the device and shown read-only offline (fonts + seen images
       included); CJK font subsets are only fetched when CJK text is drawn, then cached
-- [ ] **Production Supabase setup + first GitHub Pages deploy** — owner steps in README ("Production setup")
+- [x] Production Supabase setup + first GitHub Pages deploy (live at https://dswya.github.io/tabi/; owner steps in README)
+- [x] Post-launch fixes: the phone shell is exactly one screen tall and only `<main>` scrolls, so the bottom bar can't
+      drift on Android foldables; Whiteboard ("Board") joins the bottom bar; a `/rest/v1/` or trailing slash in
+      `VITE_SUPABASE_URL` is tolerated
 
 ## Later (not scheduled)
 - Optional web push (needs VAPID keys + a Supabase Edge Function; in-app notifications cover the family for now)

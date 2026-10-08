@@ -1,5 +1,7 @@
 import { formatPrice, formatUsd } from './format'
-import { FX_CACHE_KEY, FX_MAX_AGE_MS, getUsdPerJpy, isRateFresh, jpyToUsd, readCachedRate, writeCachedRate } from './fx'
+import {
+  FX_CACHE_KEY, FX_MAX_AGE_MS, getUsdPerJpy, isRateFresh, jpyToUsd, parseMoney, readCachedRate, usdToJpy, writeCachedRate,
+} from './fx'
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial))
@@ -79,4 +81,23 @@ describe('exchange-rate cache', () => {
     const serverError = vi.fn(async () => new Response('nope', { status: 503 })) as unknown as typeof fetch
     expect(await getUsdPerJpy({ fetchFn: serverError, storage, now: () => NOW })).toBeNull()
   })
+})
+
+describe('converter helpers', () => {
+  it('converts dollars to whole yen', () => {
+    expect(usdToJpy(20, 0.0067)).toBe(2985)
+    expect(usdToJpy(0, 0.0067)).toBe(0)
+  })
+
+  it.each([
+    ['1,000', 1000],
+    ['¥ 2500', 2500],
+    ['$12.50', 12.5],
+    ['12.', 12],
+    ['.5', 0.5],
+    ['', null],
+    ['abc', null],
+    ['1.2.3', null],
+    ['-5', null],
+  ])('parses %j as %j', (text, value) => expect(parseMoney(text)).toBe(value))
 })

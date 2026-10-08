@@ -2,6 +2,7 @@ import { CalendarDays, ChevronRight, Clock, MapPin, Plane, Sparkles, Ticket, Vot
 import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { CategoryBadge, ReservationBadge, StatusBadge } from '@/components/badges'
+import { CurrencyConverter } from '@/components/CurrencyConverter'
 import { PageHeader } from '@/components/PageHeader'
 import { AddedBy } from '@/components/places/bits'
 import { usePlaceSheet } from '@/components/places/placeSheet'
@@ -101,6 +102,7 @@ export default function Dashboard() {
         <UpcomingCards />
         <GlanceCard />
         <RecentCard />
+        <CurrencyConverter />
       </div>
     </>
   )

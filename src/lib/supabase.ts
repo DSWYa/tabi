@@ -1,8 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined
+/**
+ * The project URL as the client wants it: `https://<ref>.supabase.co`. Tolerates the common copy-paste slips — the
+ * REST endpoint (`…/rest/v1/`), a trailing slash, stray spaces — which would otherwise make every request fail.
+ */
+export function normalizeSupabaseUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '')
+  return trimmed || undefined
+}
+
+const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined)
+const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() || undefined
 
 export const isSupabaseConfigured = Boolean(url && key)
 

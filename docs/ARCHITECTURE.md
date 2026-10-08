@@ -109,6 +109,9 @@ App (session + profile)           everything else; intent cleared
 ## Frontend layout
 - `src/App.tsx` — router; `RequireMember` shows Gate / JoinFamily / the app depending on session + profile.
 - `src/layout/AppShell.tsx` — sidebar (≥ lg), top bar + bottom nav + "More" sheet (< lg), global quick-add FAB.
+  The shell is exactly one screen tall and only `<main>` scrolls (scroll reset to the top on navigation); the bottom
+  nav is an ordinary flex row. With the document scrolling and a `position: fixed` nav, some Android browsers
+  (foldables) let the visual viewport pan and the nav drifted with the page.
 - `src/lib/` — typed supabase client, auth/theme providers, `members` (profile queries + mutations), `trip`,
   `realtime`, `join` (pure join-flow helpers), `image` (avatar resize), `pinColors`, constants, formatting.
   Phase 3: `places` (queries + mutations, optimistic votes/status), `placeBoard` (places + votes + members joined),

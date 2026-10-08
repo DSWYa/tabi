@@ -8,6 +8,8 @@ export interface NavItem {
   icon: LucideIcon
   /** Shown in the phone bottom bar; everything else lives in the "More" sheet. */
   primary?: boolean
+  /** Bottom-bar label when `label` is too long for a 360 px phone. */
+  short?: string
   /** Only listed for admins (the page itself is still guarded, and Postgres enforces the rules). */
   adminOnly?: boolean
 }
@@ -19,7 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/plans', label: 'Current Plans', icon: ListChecks },
   { to: '/itinerary', label: 'Itinerary', icon: CalendarDays, primary: true },
   { to: '/map', label: 'Map', icon: Map, primary: true },
-  { to: '/whiteboard', label: 'Whiteboard', icon: PenTool },
+  { to: '/whiteboard', label: 'Whiteboard', short: 'Board', icon: PenTool, primary: true },
   { to: '/info', label: 'Travel Info', icon: Info },
   { to: '/settings', label: 'Profile & Settings', icon: Settings },
   { to: '/admin', label: 'Family admin', icon: ShieldCheck, adminOnly: true },

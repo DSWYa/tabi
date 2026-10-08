@@ -64,8 +64,10 @@ Your site will live at `https://<github-user>.github.io/<repo>/` (for this repo:
    first. You can add more owner emails the same way. Owner emails live only in the database, never in git.
 5. **GitHub:** *Settings → Pages → Build and deployment → Source: GitHub Actions*.
    *Settings → Secrets and variables → Actions → Variables* tab → *New repository variable*, twice:
-   `VITE_SUPABASE_URL` (Supabase *Project Settings → Data API*, "Project URL") and `VITE_SUPABASE_PUBLISHABLE_KEY`
-   (*Project Settings → API Keys*, the `sb_publishable_…` key). These are public by design; RLS protects the data.
+   `VITE_SUPABASE_URL` (Supabase *Project Settings → Data API*, "Project URL" — just `https://<project-ref>.supabase.co`,
+   no `/rest/v1/`) and `VITE_SUPABASE_PUBLISHABLE_KEY` (*Project Settings → API Keys*, the `sb_publishable_…` key).
+   Both are baked into the build: after changing one, re-run the deploy (*Actions → Deploy to GitHub Pages → Run
+   workflow*). These are public by design; RLS protects the data.
    **Never** put the secret/service-role key in GitHub variables or any `VITE_` variable.
 6. **Deploy:** merge into `main` (or push to it). *Actions* tab → "Deploy to GitHub Pages" runs lint, tests and the
    build with `BASE_PATH=/<repo>/`, then publishes. Re-run it any time with *Run workflow*.
@@ -86,5 +88,11 @@ Do not run `seed:dev` against the production project.
 
 - `npm run db:start` fails pulling images (registry blocked on your network): run
   `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npx supabase start` to pull from Docker Hub instead.
+- The family-code screen says "Couldn't reach the server": the site was built with a wrong `VITE_SUPABASE_URL` or
+  key. Check both variables (step 5), re-run the deploy, then hard-refresh the site (Ctrl+F5, twice — the app caches
+  itself). The build log (*Actions* → the run → *build* → *Run npm run build*) shows the values it used.
+- `supabase db push` says "Cannot find project ref": run it from the repo's top folder after `supabase link`, or skip
+  linking with `npx supabase db push --db-url "<Session pooler connection string>"` (dashboard → *Connect* → *Direct*
+  → *Session pooler*, port 5432, password filled in).
 - A reset or confirmation link "does nothing": it must be opened in the same browser that asked for it (PKCE), and
   the site URL must be listed under *Authentication → URL Configuration → Redirect URLs*.
